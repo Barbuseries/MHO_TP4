@@ -1,13 +1,21 @@
-%% IMPORTANT: To define a MOEA, you need to create a global variable which contains the following function handles:
-%% - my_context = init(config): initialize data specific to this MOEA (this is given at each step call)
+%% IMPORTANT: To define a MOEA, you need to create a global variable
+%% which contains the following function handles:
+%% - my_context = init(config): initialize data specific to this MOEA
+%%                (this is given at each step call)
 %%
-%% - [done, output, fitness, my_context] = step(population, ga_context, my_context): given the current population, the context, and its specific context, this must return:
-%%   - If we are done. In that case, output is the result of the optimization
+%% - [done, output, fitness, my_context] = step(population,
+%%       ga_context, my_context): given the current population, the
+%%       context, and its specific context, this must return:
+%%   - If we are done. In that case, output is the result of the
+%%     optimization
 %%   - If we are not done. In that case, output is the mating pool
-%%   - The fitness of the population (which will be used to call stop_criteria_fn as the old fitness)
+%%   - The fitness of the population (which will be used to call
+%%     stop_criteria_fn as the old fitness)
 %%   - The new specific context of the algorithm
 %%
 %% - defaultConfig: default configuration values
+%%
+%% See Spea2.m
 
 function result = Ga(ga)
   result.optimize = @(varargin) optimize(ga, varargin{:});
@@ -40,7 +48,8 @@ function result = optimize(ga, maximizing, objective_vector, constraints, config
   
   decode_fn = UTILS.decode(constraints, l);
   
-  ga_context = struct('iteration', 1, 'G_max', G_max, ...
+  ga_context = struct('iteration', 1, 'G_max', G_max, ...,
+                      'old_objective_values', [], ...
 					  'objective_vector', {objective_vector}, ...
 					  'maximizing', maximizing, ...
 					  'stop_criteria_fn', config.stop_criteria_fn, ...
@@ -61,41 +70,41 @@ function result = optimize(ga, maximizing, objective_vector, constraints, config
   population = initialGeneration_(N, constraints, l);
   
   last_iteration = G_max + 1;
-  old_fitness = [];
+  old_objective_values = [];
   g = 1;
-  while (g <= G_max)
+  done = false;
+  while (~done)
 	if (l == -1)
 	  context.iteration = g;
     end
     
     ga_context.iteration = g;
+    ga_context.old_objective_values = old_objective_values;
 
 	%% Evaluation and selection
-	[done, output, fitness, specific_context] = ga.step(population, ga_context, specific_context);
+	[done, output, objective_values, specific_context] = ga.step(population, ga_context, specific_context);
 
 	if (done)
 	  last_iteration = g;
       result = output;
-      
-      break;
-    end
-    
-    %% Crossover
-    children = crossover_(output, crossover_fn, Pc, context);
+    else    
+      %% Crossover
+      children = crossover_(output, crossover_fn, Pc, context);
 
-    %% Every allele that needs to mutate is 1 at the correponding index
-    if (l == -1)
-      mutations = rand(N, var_count, 1) <= Pm;
-    else
-      mutations = rand(N, l, var_count) <= Pm;
-    end
+      %% Every allele that needs to mutate is 1 at the correponding index
+      if (l == -1)
+		mutations = rand(N, var_count, 1) <= Pm;
+      else
+		mutations = rand(N, l, var_count) <= Pm;
+      end
 
-    %% Mutation
-    population = mutation_fn(children, mutations, context);
+      %% Mutation
+      population = mutation_fn(children, mutations, context);
 
-    old_fitness = fitness;
-    g = g + 1;
-   end
+      old_objective_values = objective_values;
+      g = g + 1;
+	end
+  end
 
   toc;
 end

@@ -13,7 +13,7 @@ function result = init_(config)
                   'selection_fn', SELECTION.tournament(2, config.N));
 end
 
-function [done, result, fitness, my_context] = step_(population, ga_context, my_context)
+function [done, result, objective_values, my_context] = step_(population, ga_context, my_context)
   objective_vector = ga_context.objective_vector;
   maximizing = ga_context.maximizing;
   
@@ -22,6 +22,7 @@ function [done, result, fitness, my_context] = step_(population, ga_context, my_
 
   g = ga_context.iteration;
   G_max = ga_context.G_max;
+  old_objective_values = ga_context.old_objective_values;
   
   M = my_context.M;
   archive = my_context.archive;
@@ -31,17 +32,16 @@ function [done, result, fitness, my_context] = step_(population, ga_context, my_
   
   %% Evaluation
   %% TODO: Should we add a fitness_vector parameter and use it here
-  %% instead? (Like we did with Ga in the first exercice?)
+  %% instead of directly using objective_vector? (Like we did with Ga
+  %% in the first exercice?)
   pool = vertcat(population, archive);
   [fitness, real_values_pop, objective_values] = evalFitnessAndPop_(pool, objective_vector, decode_fn, maximizing);
   indices_to_archive = environmentalSelection_(pool, objective_values, fitness, M);
 
-  %%TODO: Stop criteria on objective_values / fitness_values (if we
-  %% change objective_vector to fitness_vector).
-  %% Change StopCriteria to take a cell array of functions, and a
-  %% matrix of results. (not just one function and an array)
-  %% if ((g == G_max) || stop_criteria_fn(fitness, old_fitness))
-  if (g == G_max)
+  %% TODO: Should we call stop_criteria_fn only on non-dominated
+  %% archive individuals? (Because those are the ones we return in the
+  %% end...)
+  if ((g == G_max) || stop_criteria_fn(objective_values, old_objective_values, maximizing))
 	non_dominated = fitness(indices_to_archive) < 1;
 	
 	%% TODO/FIXME: In case non_dominated is empty (no global non
@@ -72,7 +72,7 @@ function [done, result, fitness, my_context] = step_(population, ga_context, my_
 end
 
 function result = defaultConfig_
-	 %DEFAULTCONFIG Preconfigured genetic algorithm config.
+	 %DEFAULTCONFIG_ Preconfigured genetic algorithm config.
 	 %
 	 % Fields
 	 %  N                  Population count
@@ -191,7 +191,7 @@ function result = environmentalSelection_(pop_and_archive, objective_values, fit
     
     can_fill_count = length(sorted_indices);
     
-    %% NOTE: There may not be even enough individuals to fill the
+    %% NOTE: There may not even be enough individuals to fill the
     %% archive.
     %% So fill as much as it is possible.
     start_index = (non_dominated_count+1);

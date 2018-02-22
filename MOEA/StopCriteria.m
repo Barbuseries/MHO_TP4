@@ -2,7 +2,7 @@ function StopCriteria
 			%STOPCRITERIA All stop criteria functions.
 			%
 			% time
-			% threshold(RELATION, T), T as limit (depends on RELATION)
+			% threshold(T), T as limit (upper limit if minimizing, upper limit otherwhise)
 			% variance(V), V as lower limit
 			% minMaxRatio(R)
 			% meanChangeRate(CR), CR as lower limit
@@ -12,7 +12,7 @@ function StopCriteria
   global STOP_CRITERIA;
   
   %% Time
-  STOP_CRITERIA.time = @(f, old_f) 0;
+  STOP_CRITERIA.time = @(varargin) 0;
   
   STOP_CRITERIA.threshold = @threshold;
   STOP_CRITERIA.variance = @variance;
@@ -21,60 +21,104 @@ function StopCriteria
   STOP_CRITERIA.meanChangeRate = @meanChangeRate;
 end
 
-function h = threshold(relation, t)
-			%THRESHOLD Stop at least one individual as a fitness such as RELATION(FITNESS, T) == 1.
+function h = threshold(t, count)
+%THRESHOLD Stop at least COUNT individuals have all objective values <= T
+% if minimizing, >= T otherwhise.
+%  
+% T can either be a scalar (same T for all objective values) or a
+% vector.
+%
+% COUNT defaults to 1.
+
+  if (~exist('count', 'var'))
+    count = 1;
+  elseif (count <= 0)
+    error('threshold: COUNT must be greater than 0');
+  end
   
-  h = @(f, old_f) threshold_(relation, t, f);
+  h = @(ov, ~, maximizing) threshold_(t, count, ov, maximizing);
 end
 
-function result = threshold_(relation, t, fitness)
-  result = ~isempty(find(relation(fitness, t), 1));
+function result = threshold_(t, count, objective_values, maximizing)
+  [N, fn_count] = size(objective_values);
+  t_count = length(t);
+  
+  if (t_count == 1)
+	t = t * ones(1, fn_count);
+  else
+	if (t_count ~= fn_count)
+	  error('threshold: T must either be a scalar or a vector the same length as the OBJECTIVE_VECTOR');
+	end
+  end
+  
+  if (count > N)
+      error('threshold: COUNT must be less than or equal to N');
+  end
+  
+  if (maximizing)
+	relation = @ge;
+  else
+	relation = @le;
+  end
+
+  BY_ROW = 2;
+  is_valid = sum(relation(objective_values, t), BY_ROW) == fn_count;
+  result = sum(is_valid) >= count;
 end
 
 function h = variance(v)
-  %VARIANCE Stop when var(fitness) <= V..
+  %VARIANCE Stop when var(objective_values) <= V..
   
-  h = @(f, old_f) variance_(v, f);
+  h = @(ov, varargin) variance_(v, ov);
 end
 
-function result = variance_(v, fitness)
-  result = (var(fitness) <= v);
+%% TODO: Same as t, allow scalar or vector.
+function result = variance_(v, objective_values)
+  [~, fn_count] = size(objective_values);
+  result = sum(var(objective_values) <= v) == fn_count;
 end
 
 function h = minMaxRatio(r)
- %MINMAXRATIO Stop when max(fitness) / min(fitness) is equal to ratio.
+%MINMAXRATIO Stop when max(objective_values) / min(objective_values)
+% is equal to ratio.
   
   if (r <= 0)
 	error('minMaxRatio: R must be > 0');
   end
   
-  h = @(f, old_f) minMaxRatio_(r, f);
+  h = @(ov, varargin) minMaxRatio_(r, ov);
 end
 
-function result = minMaxRatio_(ratio, fitness)
-  max_f = max(fitness);
-  min_f = min(fitness);
-
-  result = (abs((max_f / min_f) - ratio) <= eps);
-end
-
-function h = meanChangeRate(cr)
-	%MEANCHANGERATE Stop when the difference between mean(fitness) and
-	% mean(old_fitness) is <= CR * 100.
+%% TODO: Same as t, allow scalar or vector.
+function result = minMaxRatio_(ratio, objective_values)
+  [~, fn_count] = size(objective_values);
   
-  h = @(f, old_f) meanChangeRate_(cr, f, old_f);
+  max_ov = max(objective_values);
+  min_ov = min(objective_values);
+
+  result = sum(abs((max_ov ./ min_ov) - ratio) <= eps) == fn_count;
 end
 
-function result = meanChangeRate_(change_rate, fitness, old_fitness)
-  %% First iteration, no old fitness
-  if (length(old_fitness) == 0)
+%% TODO: Same as t, allow scalar or vector.
+function h = meanChangeRate(cr)
+%MEANCHANGERATE Stop when the difference between mean(objective_values) and
+% mean(old_objective_values) is <= CR * 100.
+  
+  h = @(ov, old_ov, ~) meanChangeRate_(cr, ov, old_ov);
+end
+
+function result = meanChangeRate_(change_rate, objective_values, old_objective_values)
+  [~, fn_count] = size(old_objective_values);
+
+  %% First iteration, no old objective_values
+  if (fn_count == 0)
 	result = 0;
 	return;
   end
   
-  mean_f = mean(fitness);
-  mean_old_f = mean(old_fitness);
+  mean_ov = mean(objective_values);
+  mean_old_ov = mean(old_objective_values);
 
-  rate = abs((mean_f - mean_old_f) / mean_old_f);
-  result = (rate <= change_rate);
+  rate = abs((mean_ov - mean_old_ov) ./ mean_old_ov);
+  result = sum(rate <= change_rate) == fn_count;
 end

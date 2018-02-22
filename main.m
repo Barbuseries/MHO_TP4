@@ -13,7 +13,7 @@ Spea2;         global SPEA2;
 Problem;       global PROBLEM;
 
 
-PROFILING = 1;
+PROFILING = 0;
 
 if (PROFILING)
   profile off;
@@ -35,6 +35,7 @@ config.G_max = 200;
 config.l = 52;
 config.crossover_fn = CROSSOVER.uniform(0.5);
 config.mutation_fn = MUTATION.bitFlip;
+config.stop_criteria_fn = STOP_CRITERIA.meanChangeRate(0.005);
 
 r = p.optimize(config);
 disp(r);
