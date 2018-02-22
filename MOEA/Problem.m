@@ -10,6 +10,7 @@ function Problem
   PROBLEM.kursawe = @kursawe;
   PROBLEM.shaffer = @shaffer;
   PROBLEM.fonsecaFlemming = @fonsecaFlemming;
+  PROBLEM.poloni = @poloni;
 end
 
 %% TOTO
@@ -94,6 +95,35 @@ function result = fonsecaFlemming_f2_(n, varargin)
   inv_sqrt3 = 1 / sqrt(3);
   result = 1 - exp(-sum((xi + inv_sqrt3) .^2, BY_DEPTH));
 end
+
+%% Poloni
+function result = poloni(ga)
+  result.objective_vector = {@poloni_f1_, @poloni_f2_};
+  result.constraints = [[-pi, pi],
+						[-pi, pi]];
+
+  result.optimize = optimize_(ga, result, 0);
+end
+
+function result = poloni_f1_(x, y)
+  A1 = poloni_b1_(1, 2);
+  A2 = poloni_b2_(1, 2);
+
+  result = 1 + ((A1 - poloni_b1_(x, y)) .^2) + ((A2 - poloni_b2_(x, y)) .^2);
+end
+
+function result = poloni_f2_(x, y)
+  result = ((x + 3) .^2) + ((y + 1) .^ 2);
+end
+
+function result = poloni_b1_(x, y)
+  result = 0.5 * sin(x) - 2 * cos(x) + sin(y) - 1.5 * cos(y);
+end
+
+function result = poloni_b2_(x, y)
+  result = 1.5 * sin(x) - cos(x) + 2 * sin(y) - 0.5 * cos(y);
+end
+
 
 
 function result = optimize_(ga, problem, maximize)
