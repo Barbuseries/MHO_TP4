@@ -189,13 +189,19 @@ function showPaleto_(problem, variables, plot_objective_domain)
   can_plot_fn = (fn_count <= 3);
   plot_count = can_plot_var + can_plot_fn;
   
-  if (var_count == 2)
+  if (var_count == 1)
+      m = 500;
+  elseif (var_count == 2)
       m = 50;
   else
-      m = 10;
+      m = 20;
   end
   
-  if (var_count == 2)
+  if (var_count == 1)
+    dx = meshgrid(UTILS.linspacea(constraints, m));  
+    dy = 0 * dx;
+    dz = 0 * dy;
+  elseif (var_count == 2)
     [dx, dy] = meshgrid(UTILS.linspacea(constraints, m));
     dz = 0 * dx;
   else
@@ -208,8 +214,17 @@ function showPaleto_(problem, variables, plot_objective_domain)
 	subplot(1, plot_count, 1);
     hold on;
 
+    plotted_values = variables;
+    plot_axis = reshape(constraints', 1, []);
+    
     %% Set plot's axis limits to constraints
-    axis(reshape(constraints', 1, []));
+    if (var_count == 1)    
+        %% Set a fictional y to 0, for a prettier plot
+        plotted_values(:, end+1) = 0;
+        plot_axis = [plot_axis, -0.1, 0.1];
+    end
+    
+    axis(plot_axis);
     
     if (var_count == 3)
         plot_fn = @plot3;
@@ -221,7 +236,7 @@ function showPaleto_(problem, variables, plot_objective_domain)
     xlabel("x");
     ylabel("y");
     title("Variables' space");
-    plotN_(variables, plot_fn, 'r+');
+    plotN_(plotted_values, plot_fn, 'r+');
   end
 
   if (~can_plot_fn)
@@ -231,7 +246,9 @@ function showPaleto_(problem, variables, plot_objective_domain)
     hold on;
 
     if (plot_objective_domain)
-        if (var_count == 2)
+        if (var_count == 1)
+            fz = evalFn_(objective_vector, dx);
+        elseif (var_count == 2)
             fz = evalFn_(objective_vector, dx, dy);
         else
             fz = evalFn_(objective_vector, dx, dy, dz);
@@ -254,13 +271,13 @@ function showPaleto_(problem, variables, plot_objective_domain)
         
     if (fn_count == 3)
         plot_fn = @plot3;
-        zlabel("z");
+        zlabel("f3(X)");
     else
         plot_fn = @plot;
     end
   
-    xlabel("x");
-    ylabel("y");
+    xlabel("f1(X)");
+    ylabel("f2(X)");
     title("Objective's domain");
     h = plotN_(values, plot_fn, 'r+');
     

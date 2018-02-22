@@ -262,6 +262,8 @@ end
 
 function result = comparePoints_(points, distances)
   %[~, C] = size(distances);
+  %% FIXME: This is sometimes called with distances = [].
+  %% Should return a point at random in that case. (See commented elseif)
   min_distance = min(distances(:, 1));
   corresponding_points = find(distances == min_distance);
 
