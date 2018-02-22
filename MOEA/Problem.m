@@ -11,6 +11,7 @@ function Problem
   PROBLEM.shaffer = @shaffer;
   PROBLEM.fonsecaFlemming = @fonsecaFlemming;
   PROBLEM.poloni = @poloni;
+  PROBLEM.zdt1 = @zdt1;
 end
 
 %% TOTO
@@ -125,6 +126,35 @@ function result = poloni_b2_(x, y)
 end
 
 
+%% ZDT1
+function result = zdt1(ga, n)
+  result.objective_vector = {generate_fn_n_(n, @zdt1_f1_), generate_fn_n_(n, @zdt1_f2_)};
+  result.constraints = repmat([0, 1], n, 1);
+
+  result.optimize = optimize_(ga, result, 0);
+end
+
+function result = zdt1_f1_(n, varargin)
+  xi = shapeVariables(n, varargin{:});
+
+  result = xi(:, :, 1);
+end
+
+function result = zdt1_f2_(n, varargin)
+  xi = shapeVariables(n, varargin{:});
+
+  x1 = xi(:, :, 1);
+  g_x = zdtx_g1_(xi, n);
+  
+  result = g_x .* (1 - sqrt(x1 ./ g_x));
+end
+
+function result = zdtx_g1_(x, n)
+  BY_DEPTH = 3;
+  
+  result = 1 + 9 * sum(x(:, :, 2:end), BY_DEPTH) / (n - 1);
+end
+
 
 function result = optimize_(ga, problem, maximize)
     result = @(config) ga.optimize(maximize, problem.objective_vector, problem.constraints, config);
@@ -136,6 +166,7 @@ end
 
 %% IMPORTANT: To sum variables (x + y, ...), the sum must be done on
 %% the _depth_ (i.e, sum(..., 3)).
+%% (x is represented by result(:, :, 1), y by result(:, :, 2), ...)
 function result = shapeVariables(n, varargin)
   %% Reshape to have separated variables represented by the depth
   %% (v(:, :, i)) (so it works with matrices)
