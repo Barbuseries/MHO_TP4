@@ -197,6 +197,7 @@ function showPaleto_(problem, variables, plot_objective_domain)
       m = 20;
   end
   
+  %% FIXME: This does not work if some constraints are different from the others
   if (var_count == 1)
     dx = meshgrid(UTILS.linspacea(constraints, m));  
     dy = 0 * dx;
@@ -281,7 +282,7 @@ function showPaleto_(problem, variables, plot_objective_domain)
     title("Objective's domain");
     h = plotN_(values, plot_fn, 'r+');
     
-    legend(h, "Pareto frontier");
+    legend(h, "Pareto front");
   end
 end
 

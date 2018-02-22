@@ -11,9 +11,11 @@ function Problem
   PROBLEM.shaffer = @shaffer;
   PROBLEM.fonsecaFlemming = @fonsecaFlemming;
   PROBLEM.poloni = @poloni;
+  
   PROBLEM.zdt1 = @zdt1;
   PROBLEM.zdt2 = @zdt2;
   PROBLEM.zdt3 = @zdt3;
+  PROBLEM.zdt4 = @zdt4;
 end
 
 %% TOTO
@@ -130,13 +132,13 @@ end
 
 %% ZDT1
 function result = zdt1(ga, n)
-  result.objective_vector = {generate_fn_n_(n, @zdt1_f1_), generate_fn_n_(n, @zdt1_f2_)};
+  result.objective_vector = {generate_fn_n_(n, @zdtx_f1_), generate_fn_n_(n, @zdt1_f2_)};
   result.constraints = repmat([0, 1], n, 1);
 
   result.optimize = optimize_(ga, result, 0);
 end
 
-function result = zdt1_f1_(n, varargin)
+function result = zdtx_f1_(n, varargin)
   xi = shapeVariables(n, varargin{:});
 
   result = xi(:, :, 1);
@@ -159,16 +161,10 @@ end
 
 %% ZDT2
 function result = zdt2(ga, n)
-  result.objective_vector = {generate_fn_n_(n, @zdt2_f1_), generate_fn_n_(n, @zdt2_f2_)};
+  result.objective_vector = {generate_fn_n_(n, @zdtx_f1_), generate_fn_n_(n, @zdt2_f2_)};
   result.constraints = repmat([0, 1], n, 1);
 
   result.optimize = optimize_(ga, result, 0);
-end
-
-function result = zdt2_f1_(n, varargin)
-  xi = shapeVariables(n, varargin{:});
-
-  result = xi(:, :, 1);
 end
 
 function result = zdt2_f2_(n, varargin)
@@ -182,16 +178,10 @@ end
 
 %% ZDT3
 function result = zdt3(ga, n)
-  result.objective_vector = {generate_fn_n_(n, @zdt3_f1_), generate_fn_n_(n, @zdt3_f2_)};
+  result.objective_vector = {generate_fn_n_(n, @zdtx_f1_), generate_fn_n_(n, @zdt3_f2_)};
   result.constraints = repmat([0, 1], n, 1);
 
   result.optimize = optimize_(ga, result, 0);
-end
-
-function result = zdt3_f1_(n, varargin)
-  xi = shapeVariables(n, varargin{:});
-
-  result = xi(:, :, 1);
 end
 
 function result = zdt3_f2_(n, varargin)
@@ -202,7 +192,33 @@ function result = zdt3_f2_(n, varargin)
 
   x1_over_g_x = x1 ./ g_x;
   
-  result = g_x .* (1 - sqrt(x1_over_g_x) - x1_over_g_x  .* sin(10 * pi * x1));
+  result = g_x .* (1 - sqrt(x1_over_g_x)  - (x1_over_g_x  .* sin(10 * pi * x1)));
+end
+
+%% ZDT4
+function result = zdt4(ga, n)
+  result.objective_vector = {generate_fn_n_(n, @zdtx_f1_), generate_fn_n_(n, @zdt4_f2_)};
+  result.constraints = [[0, 1]; repmat([-5, 5], n - 1, 1)];
+
+  result.optimize = optimize_(ga, result, 0);
+end
+
+function result = zdt4_f2_(n, varargin)
+  xi = shapeVariables(n, varargin{:});
+
+  x1 = xi(:, :, 1);
+  g_x = zdt4_g_(xi, n);
+
+  x1_over_g_x = x1 ./ g_x;
+  
+  result = g_x .* (1 - sqrt(x1_over_g_x));
+end
+
+function result = zdt4_g_(x, n)
+  BY_DEPTH = 3;
+
+  xi = x(:, :, 2:end);
+  result = 1 + 10 * (n - 1) + sum((xi .^2) - 10 * cos(4 * pi * xi), BY_DEPTH);
 end
 
 
