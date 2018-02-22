@@ -170,11 +170,14 @@ end
 
 
 %% TODO: Test 3D function plot
-%%       Add legend
-function showPaleto_(problem, variables)
+function showPaleto_(problem, variables, plot_objective_domain)
   global UTILS;
   figure(5)
   clf;
+  
+  if (~exist('plot_objective_domain', 'var'))
+      plot_objective_domain = false;
+  end
 
   constraints = problem.constraints;
   objective_vector = problem.objective_vector;
@@ -204,15 +207,21 @@ function showPaleto_(problem, variables)
   else
 	subplot(1, plot_count, 1);
     hold on;
+
+    %% Set plot's axis limits to constraints
+    axis(reshape(constraints', 1, []));
     
-    %% TODO: Plot domain in 3D (plot3(dx, dy, dz) does not work)
     if (var_count == 3)
-        %%mesh(dx, dy, dz);
-        plotN_(variables, @plot3, 'r+');  %% TODO: Test
+        plot_fn = @plot3;
+        zlabel("z");
     else    
-        mesh(dx, dy, dz);
-        plotN_(variables, @plot, 'r+');
+        plot_fn = @plot;
     end
+    
+    xlabel("x");
+    ylabel("y");
+    title("Variables' space");
+    plotN_(variables, plot_fn, 'r+');
   end
 
   if (~can_plot_fn)
@@ -221,35 +230,49 @@ function showPaleto_(problem, variables)
 	subplot(1, plot_count, plot_count);
     hold on;
 
-    if (var_count == 2)
-        fz = evalFn_(objective_vector, dx, dy);
-    else
-        fz = evalFn_(objective_vector, dx, dy, dz);
+    if (plot_objective_domain)
+        if (var_count == 2)
+            fz = evalFn_(objective_vector, dx, dy);
+        else
+            fz = evalFn_(objective_vector, dx, dy, dz);
+        end
+
+        %% TODO: Test domain plot in 3D (no 3D function yet)
+        if (fn_count == 3)
+            mesh(fz(:, :, 1), fz(:, :, 2), fz(:, :, 3));
+        else
+            x = fz(:, :, 1);
+            y = fz(:, :, 2);
+            z = zeros(size(x));
+            C = gradient(x .* y);
+
+            mesh(x, y, z, C);
+        end
     end
     
-	values = UTILS.evalFnVector(objective_vector, variables);
-    
-    %% TODO: Plot domain in 3D (no 3D function yet)
-	if (fn_count == 3)
-        mesh(fz(:, :, 1), fz(:, :, 2), fz(:, :, 3));
-        plotN_(values, @plot3, 'r+'); %% TODO: Test
-    else
-        x = fz(:, :, 1);
-        y = fz(:, :, 2);
-        z = zeros(size(x));
+    values = UTILS.evalFnVector(objective_vector, variables);
         
-        C = gradient(x .* y);
-        mesh(x, y, z, C);
-        plotN_(values, @plot, 'r+');
+    if (fn_count == 3)
+        plot_fn = @plot3;
+        zlabel("z");
+    else
+        plot_fn = @plot;
     end
+  
+    xlabel("x");
+    ylabel("y");
+    title("Objective's domain");
+    h = plotN_(values, plot_fn, 'r+');
+    
+    legend(h, "Pareto frontier");
   end
 end
 
-function plotN_(val_array, plot_fn, style)
+function result = plotN_(val_array, plot_fn, varargin)
     BY_COLUMN = 2; 
     to_var_arg = num2cell(val_array', BY_COLUMN);
     
-    plot_fn(to_var_arg{:}, style)
+    result = plot_fn(to_var_arg{:}, varargin{:});
 end
 
 %% NOTE: This is needed to allow evaluation of objective_vector on
@@ -259,7 +282,7 @@ end
 function result = evalFn_(objective_vector, varargin)
   [~, fn_count] = size(objective_vector);
 
-  %% It works. I do reall know why, by it does!
+  %% It works. I don't really know why, by it does!
   [N, M] = size(varargin{1});
   result = zeros(M, N, fn_count);
 
