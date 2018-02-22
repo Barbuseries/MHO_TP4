@@ -13,6 +13,7 @@ function Problem
   PROBLEM.poloni = @poloni;
   PROBLEM.zdt1 = @zdt1;
   PROBLEM.zdt2 = @zdt2;
+  PROBLEM.zdt3 = @zdt3;
 end
 
 %% TOTO
@@ -179,7 +180,30 @@ function result = zdt2_f2_(n, varargin)
   result = g_x .* (1 - (x1 ./ g_x) .^2);
 end
 
+%% ZDT3
+function result = zdt3(ga, n)
+  result.objective_vector = {generate_fn_n_(n, @zdt3_f1_), generate_fn_n_(n, @zdt3_f2_)};
+  result.constraints = repmat([0, 1], n, 1);
 
+  result.optimize = optimize_(ga, result, 0);
+end
+
+function result = zdt3_f1_(n, varargin)
+  xi = shapeVariables(n, varargin{:});
+
+  result = xi(:, :, 1);
+end
+
+function result = zdt3_f2_(n, varargin)
+  xi = shapeVariables(n, varargin{:});
+
+  x1 = xi(:, :, 1);
+  g_x = zdtx_g1_(xi, n);
+
+  x1_over_g_x = x1 ./ g_x;
+  
+  result = g_x .* (1 - sqrt(x1_over_g_x) - x1_over_g_x  .* sin(10 * pi * x1));
+end
 
 
 function result = optimize_(ga, problem, maximize)
