@@ -1,3 +1,6 @@
+folder = fileparts(which(mfilename)); 
+addpath(genpath(folder))
+
 %% Includes
 Utils;         global UTILS;
 
@@ -10,7 +13,7 @@ Spea2;         global SPEA2;
 Problem;       global PROBLEM;
 
 
-PROFILING = 0;
+PROFILING = 1;
 
 if (PROFILING)
   profile off;
@@ -18,9 +21,12 @@ if (PROFILING)
   profile on;
 end
 
-p = PROBLEM.kursawe(SPEA2, 2);
+algo = Ga(SPEA2);
 
-config = SPEA2.defaultConfig();
+
+p = PROBLEM.kursawe(algo, 2);
+
+config = algo.defaultConfig();
 config.Pc = 0.8;
 config.Pm = 0.01;
 config.N = 100;
@@ -33,7 +39,7 @@ config.mutation_fn = MUTATION.bitFlip;
 r = p.optimize(config);
 disp(r);
 
-SPEA2.showPaleto(p, r);
+algo.showPaleto(p, r);
 
 if (PROFILING)
   if (UTILS.isMatlab)
