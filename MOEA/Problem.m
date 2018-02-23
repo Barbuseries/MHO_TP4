@@ -16,6 +16,7 @@ function Problem
   PROBLEM.zdt2 = @zdt2;
   PROBLEM.zdt3 = @zdt3;
   PROBLEM.zdt4 = @zdt4;
+  PROBLEM.zdt6 = @zdt6;
 end
 
 %% TOTO
@@ -221,6 +222,42 @@ function result = zdt4_g_(x, n)
   result = 1 + 10 * (n - 1) + sum((xi .^2) - 10 * cos(4 * pi * xi), BY_DEPTH);
 end
 
+
+%% ZDT6
+function result = zdt6(ga, n)
+  result.objective_vector = {generate_fn_n_(n, @zdt6_f1_), generate_fn_n_(n, @zdt6_f2_)};
+  result.constraints = repmat([0, 1], n, 1);
+
+  result.optimize = optimize_(ga, result, 0);
+end
+
+function result = zdt6_f1_(n, varargin)
+  xi = shapeVariables(n, varargin{:});
+  result = zdt6_f1_inner_(xi);
+end
+
+function result = zdt6_f1_inner_(x)
+  x1 = x(:, :, 1);
+  result = 1 - (exp(-4 * x1) .* (sin(6 * pi * x1) .^ 6));
+end
+
+function result = zdt6_f2_(n, varargin)
+  xi = shapeVariables(n, varargin{:});
+
+  f1 = zdt6_f1_inner_(xi);
+  g_x = zdt6_g_(xi, n);
+
+  f1_over_g_x = f1 ./ g_x;
+  
+  result = g_x .* (1 - ((f1_over_g_x) .^ 2));
+end
+
+function result = zdt6_g_(x, n)
+  BY_DEPTH = 3;
+
+  xi = x(:, :, 2:end);
+  result = 1 + 9 * ((sum(xi, BY_DEPTH) / (n - 1)) .^ 0.25);
+end
 
 function result = optimize_(ga, problem, maximize)
     result = @(config) ga.optimize(maximize, problem.objective_vector, problem.constraints, config);
