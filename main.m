@@ -10,6 +10,7 @@ Mutation;      global MUTATION;
 StopCriteria;  global STOP_CRITERIA;
 Clamp;         global CLAMP;
 Spea2;         global SPEA2;
+Nsga2;         global NSGA2;
 Problem;       global PROBLEM;
 
 
@@ -21,21 +22,21 @@ if (PROFILING)
   profile on;
 end
 
-algo = Ga(SPEA2);
+algo = Ga(NSGA2);
 
 
-p = PROBLEM.kursawe(algo, 2);
+p = PROBLEM.zdt3(algo, 30);
 
 config = algo.defaultConfig();
-config.Pc = 0.8;
-config.Pm = 0.01;
-config.N = 100;
-config.M = 150;
-config.G_max = 200;
-config.l = 52;
-config.crossover_fn = CROSSOVER.uniform(0.5);
-config.mutation_fn = MUTATION.bitFlip;
-config.stop_criteria_fn = STOP_CRITERIA.meanChangeRate(0.005);
+config.Pc = 0.9;
+config.Pm = 0.0192;
+config.N = 500;
+config.M = 100;
+config.G_max = 250;
+config.l = -1;
+config.crossover_fn = CROSSOVER.simulatedBinary(20);
+config.mutation_fn = MUTATION.polynomial(20);
+%config.stop_criteria_fn = STOP_CRITERIA.meanChangeRate(0.005);
 
 r = p.optimize(config);
 disp(r);

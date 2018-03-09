@@ -40,9 +40,23 @@ function [done, result, objective_values, my_context] = step_(population, ga_con
 	%% Minus sign: tournament selection compare by >, but fitness is better when <.
 	selection = selection_fn(-rank);
 	result = population(selection, :);
+
+	my_context.parents = population;
   else
 	new_population_count = 0;
 	indices_to_keep = zeros(1, N);
+	
+
+	%% TODO: Instead of saving the crowding distance and the rank (we
+	%% do not really need to, what we want is the relative order of
+	%% each individual in a given front), we can use the individual
+	%% index in this array and add it to the rank (this value must be
+	%% in ]0, 1[, so index / (count + 1) should do the trick).
+	%% This can be our 'fitness'.
+	%%
+	%% rank_indices_to_keep = zeros(1, N);
+	%% crowding_distance_indices_to_keep = zeros(1, N);
+	fitness_indices_to_keep = zeros(1, N);
 
 	no_overfill = true;
 	front_index = 1;
@@ -50,37 +64,66 @@ function [done, result, objective_values, my_context] = step_(population, ga_con
 	%% There is no do-while...
 	while (no_overfill)
 	  belong_to_front = (rank == front_index);
-	  belong_to_front_count = sum(belong_to_front);
+	  front_indices = find(belong_to_front);
+	  
+	  belong_to_front_count = length(front_indices);
+
+	  front_crowding_distance = crowdingDistanceAssignment_(objective_values(front_indices, :));
 
 	  %% As long as we do not overfill, we can add all of it
 	  if ((belong_to_front_count + new_population_count) <= N)
 		append_indices = (new_population_count + 1):(new_population_count + belong_to_front_count);
-		indices_to_keep(append_indices) = find(belong_to_front);
+		
+		indices_to_keep(append_indices) = front_indices;
+		%% rank_indices_to_keep(append_indices) = front_index;
+		%% crowding_distance_indices_to_keep(append_indices) = front_crowding_distance;
+		%% TODO: Explain (see TODO above) and find a better name!
+		[~, bias] = sort(-front_crowding_distance);
+		bias = bias / (belong_to_front_count + 1);
+		
+		fitness_indices_to_keep(append_indices) = front_index + bias;
 
 		new_population_count = new_population_count + belong_to_front_count;
         
-        front_index = front_index + 1;
+        if (new_population_count == N)
+            break
+        else
+            front_index = front_index + 1;
+        end
 	  else
 		no_overfill = false;
       end
 	end
 
 	%% We can partially add the last front
-	if (population_count < N)
-	  %%TODO: Crowding distance sort on front.
-	  error('Not yet done, sorry');
+	if (new_population_count < N)
+	  remaining_count = N - new_population_count;
+	  
+	  [~, sorted_indices] = mink(-front_crowding_distance, remaining_count);
+
+	  abs_indices = front_indices(sorted_indices);
+	  
+      indices_to_fill = (new_population_count+1):N;
+	  indices_to_keep(indices_to_fill) = abs_indices;
+	  %% rank_indices_to_keep(indices_to_fill) = front_index;
+	  %% crowding_distance_indices_to_keep(indices_to_fill) = front_crowding_distance(sorted_indices);
+
+	  %% TODO: Explain (see both TODO above) and find a better name!
+	  fitness_indices_to_keep(indices_to_fill) = front_index + (sorted_indices / (remaining_count + 1));
     end
-    
-    result = pool(indices_to_keep, :);
+
+	new_population = pool(indices_to_keep, :);
+    selection = selection_fn(-fitness_indices_to_keep);
+    result = new_population(selection, :);
+
+	my_context.parents = new_population;
   end
 
   if ((g == G_max) || stop_criteria_fn(objective_values, old_objective_values, maximizing))
 	done = true;
-    
+
     result = decode_fn(result);
   end
-
-  my_context.parents = population;
 end
 
 function result = defaultConfig_
@@ -131,43 +174,77 @@ function [rank, real_values_pop, objective_values] = evalRankAndPop_(population,
   rank = fastNonDominatedSort_(objective_values, maximizing);
 end
 
-%% NOTE: Some liberties where taken to implement this function. It
-%% should return the same result as the original one, but this one
-%% should be faster (tests incoming!).
-%% This was done because this version is easier to write and to
-%% vectorise (so Matlab can run it quicker).
 function result = fastNonDominatedSort_(objective_values, maximizing)
   [N, fn_count] = size(objective_values);
+  BY_COLUMN = 1;
   BY_ROW = 2;
 
   result = zeros(1, N);
+  
+  if (maximizing)
+    relation = @ge; %% i dominates j, all objective values of i >= objective values of j
+  else
+    relation = @le;  %% i dominates j, all objective values of i <= objective values of j
+  end
+
+  point_domination = zeros(N, N);
+  
+  for i = 1:N
+      domination = sum(relation(objective_values(i, :), objective_values), BY_ROW)' == fn_count;
+    
+      %% In case multiple points have the same values, we are both dominated and dominators of those other points.
+      %% In that case, we do not want to consider them as being dominated or dominators.
+      %% As we also check the point itself, this also takes care of that.
+      is_dominated = (domination == 1);
+      is_same = sum(objective_values(i, :) == objective_values(is_dominated, :), BY_ROW)' == fn_count;
+      
+      domination(is_dominated) = ~is_same;
+      point_domination(i, :) = domination;
+  end
+  
+  point_dominators_count = sum(point_domination, BY_COLUMN);
+
   indices_to_compare = 1:N;
   indices_to_compare_count = N;
   
-  if (maximizing)
-    relation = @gt; %% i is dominated by j, all objective values of i > objective values of j
-  else
-    relation = @lt;  %% i is dominated by j, all objective values of i < objective values of j
-  end
-
   front_index = 1;
-  while (indices_to_compare_count > 0)
-	points_to_compare = objective_values(indices_to_compare, :);
-	is_non_dominated = zeros(1, indices_to_compare_count);
+  while (indices_to_compare_count)
+	rel_front_indices = find(point_dominators_count(indices_to_compare) == 0);
+	front_indices_count = length(rel_front_indices);
+	
+	assert(front_indices_count ~= 0);
 
-	for i = 1:indices_to_compare_count
-	  is_dominated = (sum(relation(points_to_compare, points_to_compare(i, :)), BY_ROW) == fn_count);
-	  is_non_dominated(i) = (sum(is_dominated) == 0);
-    end
-    
-	rel_non_dominated_indices = is_non_dominated ~= 0;
-    abs_non_dominated_indices = indices_to_compare(rel_non_dominated_indices);
-    
-	result(abs_non_dominated_indices) = front_index;
+	abs_front_indices = indices_to_compare(rel_front_indices);
+	result(abs_front_indices) = front_index;
 
-    indices_to_compare(rel_non_dominated_indices) = [];
-	indices_to_compare_count = indices_to_compare_count - length(abs_non_dominated_indices);
-    
+	point_dominators_count = point_dominators_count - sum(point_domination(abs_front_indices, :), BY_COLUMN);
+
 	front_index = front_index + 1;
+
+	indices_to_compare(rel_front_indices) = [];
+	indices_to_compare_count = indices_to_compare_count - front_indices_count;
+  end
+end
+
+function result = crowdingDistanceAssignment_(objective_values)
+  [N, fn_count] = size(objective_values);
+  result = zeros(1, N);
+
+  for m = 1:fn_count
+	values = objective_values(:, m);
+	
+	[~, indices] = sort(values);
+	first_index = indices(1);
+	last_index = indices(end);
+
+	%% Max - min
+	values_interval = values(last_index) - values(first_index);
+	
+	result(first_index) = Inf;
+	result(last_index) = Inf;
+
+	for i = 2:(N-1)
+	  result(i) = result(i) + (values(i + 1) - values(i - 1)) / values_interval;
+	end
   end
 end
