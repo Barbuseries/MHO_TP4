@@ -1,30 +1,10 @@
-%% IMPORTANT: To define a MOEA, you need to create a global variable
-%% which contains the following function handles:
-%% - my_context = init(config): initialize data specific to this MOEA
-%%                (this is given at each step call)
-%%
-%% - [done, output, fitness, my_context] = step(population,
-%%       ga_context, my_context): given the current population, the
-%%       context, and its specific context, this must return:
-%%   - If we are done. In that case, output is the result of the
-%%     optimization
-%%   - If we are not done. In that case, output is the mating pool
-%%   - The fitness of the population (which will be used to call
-%%     stop_criteria_fn as the old fitness)
-%%   - The new specific context of the algorithm
-%%
-%% - defaultConfig: default configuration values
-%%
-%% See Spea2.m
-
-function result = Ga(ga)
-  result.optimize = @(varargin) optimize(ga, varargin{:});
-  result.minimize = @(varargin) minimize(ga, varargin{:});
-  result.maximize = @(varargin) maximize(ga, varargin{:});
+function Ga
+  global GA;
+  GA.showPaleto = @showPaleto_;
+  GA.defaultConfig = @defaultConfig;
+  GA.make_new_pop = @make_new_pop;
   
-  result.showPaleto = @showPaleto_;
-
-  result.defaultConfig = ga.defaultConfig;
+  GA.create = @create_ga_;
 end
 
 function result = optimize(ga, maximizing, objective_vector, constraints, config)
@@ -40,72 +20,25 @@ function result = optimize(ga, maximizing, objective_vector, constraints, config
   
   G_max = config.G_max;
 
-  Pc = config.Pc;
-  Pm = config.Pm;
-
-  crossover_fn = config.crossover_fn;
-  mutation_fn = config.mutation_fn;
-  
   decode_fn = UTILS.decode(constraints, l);
-  
-  ga_context = struct('iteration', 1, 'G_max', G_max, ...,
-                      'old_objective_values', [], ...
-					  'objective_vector', {objective_vector}, ...
-					  'maximizing', maximizing, ...
-					  'stop_criteria_fn', config.stop_criteria_fn, ...
-					  'decode_fn', decode_fn);
 
-  specific_context = ga.init(config);
-  
   if (l == -1)
 	context = struct('constraints', constraints, 'G_max', G_max, 'iteration', 0, 'clamp_fn', config.clamp_fn);
   else
 	context = l;
   end
+
+  ga_context = struct('objective_vector', {objective_vector}, ...
+					  'constraints', constraints, ...
+					  'maximizing', maximizing, ...
+					  'decode_fn', decode_fn, ...
+					  'operator_context', context);
   
   tic;
   
-  [var_count, ~] = size(constraints);
-
   population = initialGeneration_(N, constraints, l);
+  result = ga.run(population, ga_context, config);
   
-  last_iteration = G_max + 1;
-  old_objective_values = [];
-  g = 1;
-  done = false;
-  while (~done)
-	if (l == -1)
-	  context.iteration = g;
-    end
-    
-    ga_context.iteration = g;
-    ga_context.old_objective_values = old_objective_values;
-
-	%% Evaluation and selection
-	[done, output, objective_values, specific_context] = ga.step(population, ga_context, specific_context);
-
-	if (done)
-	  last_iteration = g;
-      result = output;
-    else    
-      %% Crossover
-      children = crossover_(output, crossover_fn, Pc, context);
-
-      %% Every allele that needs to mutate is 1 at the correponding index
-      if (l == -1)
-		mutations = rand(N, var_count, 1) <= Pm;
-      else
-		mutations = rand(N, l, var_count) <= Pm;
-      end
-
-      %% Mutation
-      population = mutation_fn(children, mutations, context);
-
-      old_objective_values = objective_values;
-      g = g + 1;
-	end
-  end
-
   toc;
 end
 
@@ -130,6 +63,14 @@ function result = initialGeneration_(N, constraints, l)
 
 	result = randi(max_val, N, var_count);
   end
+end
+
+function result = create_ga_(ga)
+  result = ga;
+  
+  result.optimize = @(varargin) optimize(ga, varargin{:});
+  result.maximize = @(varargin) maximize(ga, varargin{:});
+  result.minimize = @(varargin) minimize(ga, varargin{:});
 end
 
 function result = crossover_(mating_pool, crossover_fn, Pc, context)
@@ -166,6 +107,22 @@ function result = crossover_(mating_pool, crossover_fn, Pc, context)
   %% Flatten the result to have [i1; i2; ...] again, instead of
   %% [ [i1, i2]; [i3, i4]; ... ]
   result = reshape([unchanged; go_through_crossover]', var_count, [])';
+end
+
+function result = make_new_pop(mating_pool, l, crossover_fn, Pc, mutation_fn, Pm, context)
+  [N, var_count] = size(mating_pool);
+  
+  children = crossover_(mating_pool, crossover_fn, Pc, context);
+
+  %% Every allele that needs to mutate is 1 at the correponding index
+  if (l == -1)
+	mutations = rand(N, var_count, 1) <= Pm;
+  else
+	mutations = rand(N, l, var_count) <= Pm;
+  end
+
+  %% Mutation
+  result = mutation_fn(children, mutations, context);
 end
 
 

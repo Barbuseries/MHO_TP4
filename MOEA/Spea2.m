@@ -2,73 +2,86 @@ function Spea2
   global SPEA2;
 
   SPEA2.defaultConfig = @defaultConfig_;
-  SPEA2.init = @init_;
-  SPEA2.step = @step_;
+  SPEA2.run = @run_;
 end
 
-function result = init_(config)
+function result = run_(population, ga_context, config)
   global SELECTION;
+  global GA;
   
-  result = struct('M', config.M, 'archive', [], ...
-                  'selection_fn', SELECTION.tournament(2, config.N));
-end
+  N = config.N;
+  M = config.M;
+  l = config.l;
+  
+  G_max = config.G_max;
 
-function [done, result, objective_values, my_context] = step_(population, ga_context, my_context)
+  Pc = config.Pc;
+  Pm = config.Pm;
+
+  crossover_fn = config.crossover_fn;
+  mutation_fn = config.mutation_fn;
+  stop_criteria_fn = config.stop_criteria_fn;
+    
   objective_vector = ga_context.objective_vector;
   maximizing = ga_context.maximizing;
-  
-  stop_criteria_fn = ga_context.stop_criteria_fn;
   decode_fn = ga_context.decode_fn;
+  context = ga_context.operator_context;
+  
+  archive = [];
+  selection_fn = SELECTION.tournament(2);
 
-  g = ga_context.iteration;
-  G_max = ga_context.G_max;
-  old_objective_values = ga_context.old_objective_values;
-  
-  M = my_context.M;
-  archive = my_context.archive;
-  selection_fn = my_context.selection_fn;
-  
+  old_objective_values = [];
+  g = 1;
   done = false;
   
-  %% Evaluation
-  %% TODO: Should we add a fitness_vector parameter and use it here
-  %% instead of directly using objective_vector? (Like we did with Ga
-  %% in the first exercice?)
-  pool = vertcat(population, archive);
-  [fitness, real_values_pop, objective_values] = evalFitnessAndPop_(pool, objective_vector, decode_fn, maximizing);
-  indices_to_archive = environmentalSelection_(pool, objective_values, fitness, M);
-
-  %% TODO: Should we call stop_criteria_fn only on non-dominated
-  %% archive individuals? (Because those are the ones we return in the
-  %% end...)
-  if ((g == G_max) || stop_criteria_fn(objective_values, old_objective_values, maximizing))
-	non_dominated = fitness(indices_to_archive) < 1;
+  while(~done)
+	if (l == -1)
+	  context.iteration = g;
+    end
 	
-	%% TODO/FIXME: In case non_dominated is empty (no global non
-	%% dominated solution was found), we need to check if, among the
-	%% indices in archive, any individual is non dominated (we only
-	%% do a check on global elements (hence fitness < 1), but if no
-	%% global non dominated solution was found, some may be non
-	%% dominated _inside_ the solutions in the archive only).
-	%% For now, this asserts has not fired, but who knows...
-	assert(sum(non_dominated) > 0);
-	
-    corresponding_values = real_values_pop(indices_to_archive, :);
+	%% Evaluation
+	%% TODO: Should we add a fitness_vector parameter and use it here
+	%% instead of directly using objective_vector? (Like we did with Ga
+	%% in the first exercice?)
+	pool = vertcat(population, archive);
+	[fitness, real_values_pop, objective_values] = evalFitnessAndPop_(pool, objective_vector, decode_fn, maximizing);
+	indices_to_archive = environmentalSelection_(pool, objective_values, fitness, M);
 
-	result = corresponding_values(non_dominated, :);
-    done = true;
-    return;
+	%% TODO: Should we call stop_criteria_fn only on non-dominated
+	%% archive individuals? (Because those are the ones we return in the
+	%% end...)
+	done = ((g == G_max) || stop_criteria_fn(objective_values, old_objective_values, maximizing));
+	
+	if (done)
+	  non_dominated = fitness(indices_to_archive) < 1;
+	  
+	  %% TODO/FIXME: In case non_dominated is empty (no global non
+	  %% dominated solution was found), we need to check if, among the
+	  %% indices in archive, any individual is non dominated (we only
+	  %% do a check on global elements (hence fitness < 1), but if no
+	  %% global non dominated solution was found, some may be non
+	  %% dominated _inside_ the solutions in the archive only).
+	  %% For now, this asserts has not fired, but who knows...
+	  assert(sum(non_dominated) > 0);
+	  
+      corresponding_values = real_values_pop(indices_to_archive, :);
+
+	  result = corresponding_values(non_dominated, :);
+	else
+	  archive = pool(indices_to_archive, :);
+	  archive_fitness = fitness(indices_to_archive);
+
+	  %% Minus sign: tournament selection compare by >, but fitness is better when <.
+	  %% TODO: Make tournament selection work with <, or keep negation...
+	  selection = selection_fn(-archive_fitness);
+	  mating_pool = archive(selection, :);
+
+	  population = GA.make_new_pop(mating_pool, l, crossover_fn, Pc, mutation_fn, Pm, context);
+	  
+	  old_objective_values = objective_values;
+	  g = g + 1;
+	end
   end
-  
-  archive = pool(indices_to_archive, :);
-  archive_fitness = fitness(indices_to_archive);
-
-  %% Minus sign: tournament selection compare by >, but fitness is better when <.
-  %% TODO: Make tournament selection work with <, or keep negation...
-  selection = selection_fn(-archive_fitness);
-  result = archive(selection, :);
-  
-  my_context.archive = archive;
 end
 
 function result = defaultConfig_

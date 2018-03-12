@@ -2,60 +2,58 @@ function Nsga2
   global NSGA2;
 
   NSGA2.defaultConfig = @defaultConfig_;
-  NSGA2.init = @init_;
-  NSGA2.step = @step_;
+  NSGA2.run = @run_;
 end
 
-function result = init_(config)
+function result = run_(population, ga_context, config)
   global SELECTION;
+  global GA;
   
-  result = struct('parents', [], ...
-				  'selection_fn', SELECTION.tournament(2, config.N));
-end
+  N = config.N;
+  l = config.l;
+  
+  G_max = config.G_max;
 
-function [done, result, objective_values, my_context] = step_(population, ga_context, my_context)
-  [N, ~] = size(population);
+  Pc = config.Pc;
+  Pm = config.Pm;
+
+  crossover_fn = config.crossover_fn;
+  mutation_fn = config.mutation_fn;
+  stop_criteria_fn = config.stop_criteria_fn;
+    
   objective_vector = ga_context.objective_vector;
   maximizing = ga_context.maximizing;
-  
-  stop_criteria_fn = ga_context.stop_criteria_fn;
   decode_fn = ga_context.decode_fn;
+  context = ga_context.operator_context;
+  
+  selection_fn = SELECTION.tournament(2);
 
-  g = ga_context.iteration;
-  G_max = ga_context.G_max;
-  old_objective_values = ga_context.old_objective_values;
+  old_objective_values = [];
+  g = 1;
   
-  selection_fn = my_context.selection_fn;
-  parents = my_context.parents;
-  
-  done = false;
-
-  pool = vertcat(parents, population);
-  
-  %% Evaluation
-  [rank, ~, objective_values] = evalRankAndPop_(pool, objective_vector, decode_fn, maximizing);
+  [rank, ~, objective_values] = evalRankAndPop_(population, objective_vector, decode_fn, maximizing);
 
   %% First iteration, just select based on rank to create children.
-  if (g == 1)
-	%% Minus sign: tournament selection compare by >, but fitness is better when <.
-	selection = selection_fn(-rank);
-	result = population(selection, :);
+  %% Minus sign: tournament selection compare by >, but rank is better when <.
+  selection = selection_fn(-rank);
+  parents = population;
+  mating_pool = parents(selection, :);
+  
+  population = GA.make_new_pop(mating_pool, l, crossover_fn, Pc, mutation_fn, Pm, context);
 
-	my_context.parents = population;
-  else
+  old_objective_values = objective_values;
+  g = g + 1;
+
+  while (~((g == G_max) || stop_criteria_fn(objective_values, old_objective_values, maximizing)))
+	pool = vertcat(parents, population);
+	
+	%% Evaluation
+	[rank, ~, objective_values] = evalRankAndPop_(pool, objective_vector, decode_fn, maximizing);
+
+	%% TODO: Separate into own function?
 	new_population_count = 0;
 	indices_to_keep = zeros(1, N);
-	
 
-	%% TODO: Instead of saving the crowding distance and the rank (we
-	%% do not really need to, what we want is the relative order of
-	%% each individual in a given front), we can use the individual
-	%% index in this array and add it to the rank (this value must be
-	%% in ]0, 1[, so index / (count + 1) should do the trick).
-	%% This can be our 'fitness'.
-	%%
-	%% rank_indices_to_keep = zeros(1, N);
-	%% crowding_distance_indices_to_keep = zeros(1, N);
 	fitness_indices_to_keep = zeros(1, N);
 
 	no_overfill = true;
@@ -75,24 +73,22 @@ function [done, result, objective_values, my_context] = step_(population, ga_con
 		append_indices = (new_population_count + 1):(new_population_count + belong_to_front_count);
 		
 		indices_to_keep(append_indices) = front_indices;
-		%% rank_indices_to_keep(append_indices) = front_index;
-		%% crowding_distance_indices_to_keep(append_indices) = front_crowding_distance;
-		%% TODO: Explain (see TODO above) and find a better name!
-		[~, bias] = sort(-front_crowding_distance);
-		bias = bias / (belong_to_front_count + 1);
 		
+		[~, sorted_indices] = sort(-front_crowding_distance);
+        bias = zeros(1, belong_to_front_count);
+		bias(sorted_indices) = (1:belong_to_front_count) / (belong_to_front_count + 1);
 		fitness_indices_to_keep(append_indices) = front_index + bias;
 
 		new_population_count = new_population_count + belong_to_front_count;
         
         if (new_population_count == N)
-            break
+          break
         else
-            front_index = front_index + 1;
+          front_index = front_index + 1;
         end
 	  else
 		no_overfill = false;
-      end
+	  end
 	end
 
 	%% We can partially add the last front
@@ -103,27 +99,26 @@ function [done, result, objective_values, my_context] = step_(population, ga_con
 
 	  abs_indices = front_indices(sorted_indices);
 	  
-      indices_to_fill = (new_population_count+1):N;
+	  indices_to_fill = (new_population_count+1):N;
 	  indices_to_keep(indices_to_fill) = abs_indices;
-	  %% rank_indices_to_keep(indices_to_fill) = front_index;
-	  %% crowding_distance_indices_to_keep(indices_to_fill) = front_crowding_distance(sorted_indices);
-
-	  %% TODO: Explain (see both TODO above) and find a better name!
-	  fitness_indices_to_keep(indices_to_fill) = front_index + (sorted_indices / (remaining_count + 1));
+	  
+	  bias = (1:remaining_count) / (remaining_count + 1);
+	  fitness_indices_to_keep(indices_to_fill) = front_index + bias;
     end
 
-	new_population = pool(indices_to_keep, :);
+	parents = pool(indices_to_keep, :);
     selection = selection_fn(-fitness_indices_to_keep);
-    result = new_population(selection, :);
+    mating_pool = parents(selection, :);
 
-	my_context.parents = new_population;
+	population = GA.make_new_pop(mating_pool, l, crossover_fn, Pc, mutation_fn, Pm, context);
+
+	old_objective_values = objective_values;
+	g = g + 1;
   end
 
-  if ((g == G_max) || stop_criteria_fn(objective_values, old_objective_values, maximizing))
-	done = true;
-
-    result = decode_fn(result);
-  end
+  [rank, real_values_pop, ~] = evalRankAndPop_(population, objective_vector, decode_fn, maximizing);
+  
+  result = real_values_pop((rank == 1), :);
 end
 
 function result = defaultConfig_
