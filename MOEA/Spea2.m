@@ -3,9 +3,10 @@ function Spea2
 
   SPEA2.defaultConfig = @defaultConfig_;
   SPEA2.run = @run_;
+  SPEA2.name = "SPEA2";
 end
 
-function result = run_(population, ga_context, config)
+function [result, h] = run_(population, ga_context, config)
   global SELECTION;
   global GA;
   
@@ -33,6 +34,9 @@ function result = run_(population, ga_context, config)
   old_objective_values = [];
   g = 1;
   done = false;
+
+  h_template = struct('population', [], 'objective_values', []);
+  h = repmat(h_template, G_max, 1);
   
   while(~done)
 	if (l == -1)
@@ -40,16 +44,10 @@ function result = run_(population, ga_context, config)
     end
 	
 	%% Evaluation
-	%% TODO: Should we add a fitness_vector parameter and use it here
-	%% instead of directly using objective_vector? (Like we did with Ga
-	%% in the first exercice?)
 	pool = vertcat(population, archive);
 	[fitness, real_values_pop, objective_values] = evalFitnessAndPop_(pool, objective_vector, decode_fn, maximizing);
 	indices_to_archive = environmentalSelection_(pool, objective_values, fitness, M);
 
-	%% TODO: Should we call stop_criteria_fn only on non-dominated
-	%% archive individuals? (Because those are the ones we return in the
-	%% end...)
 	done = ((g == G_max) || stop_criteria_fn(objective_values, old_objective_values, maximizing));
 	
 	if (done)
@@ -62,17 +60,24 @@ function result = run_(population, ga_context, config)
 	  %% global non dominated solution was found, some may be non
 	  %% dominated _inside_ the solutions in the archive only).
 	  %% For now, this asserts has not fired, but who knows...
-	  assert(sum(non_dominated) > 0);
+      %%
+	  %% assert(sum(non_dominated) > 0);
 	  
       corresponding_values = real_values_pop(indices_to_archive, :);
 
 	  result = corresponding_values(non_dominated, :);
+	  
+	  h(g).population = result;
+	  h(g).objective_values = objective_values(non_dominated, :);
 	else
 	  archive = pool(indices_to_archive, :);
 	  archive_fitness = fitness(indices_to_archive);
 
+	  non_dominated = archive_fitness < 1;
+	  h(g).population = archive(non_dominated, :);
+	  h(g).objective_values = objective_values(non_dominated, :);
+	  
 	  %% Minus sign: tournament selection compare by >, but fitness is better when <.
-	  %% TODO: Make tournament selection work with <, or keep negation...
 	  selection = selection_fn(-archive_fitness);
 	  mating_pool = archive(selection, :);
 
@@ -85,44 +90,15 @@ function result = run_(population, ga_context, config)
 end
 
 function result = defaultConfig_
-	 %DEFAULTCONFIG_ Preconfigured genetic algorithm config.
-	 %
-	 % Fields
-	 %  N                  Population count
-	 %  M                  Archive population count
-	 %  G_max              Max iteration count
-	 %  l                  Chromosome length, in [1, 53]
-	 %  Pc                 Crossover probability
-	 %  Pm                 Mutation probability
-	 %  crossover_fn       Crossover function
-	 %  mutation_fn        Mutation function
-	 %  stop_criteria_fn   Stop criteria function
-	 %  clamp_fn           Clamp function, not used with binary values
-	 %
-	 % See also Selection, Crossover, Mutation,
-	 % StopCriteria, Clamp.
+  %DEFAULTCONFIG_ Preconfigured genetic algorithm config.
+  %
+  % Fields
+  %  M                  Archive population count
   
-  global CROSSOVER;
-  global MUTATION;
-  global STOP_CRITERIA;
-  global CLAMP;
+  global GA;
   
-  result.N = 100;
+  result = GA.defaultConfig();
   result.M = 20;
-  result.G_max = 100;
-  
-  %% NOTE: 'binary' is just an integer representation (to get to the
-  % actual value => v = (i / maxI) * (c(1) - c(0)) + c(0), with c the
-  % constaints for this variable)
-  result.l = 12;
-  
-  result.Pc = 0.5;
-  result.Pm = 0.1;
-
-  result.crossover_fn = CROSSOVER.singlePoint;
-  result.mutation_fn = MUTATION.bitFlip;
-  result.stop_criteria_fn = STOP_CRITERIA.time;
-  result.clamp_fn = CLAMP.default;
 end
 
 function [fitness, real_values_pop, objective_values] = evalFitnessAndPop_(pop_and_archive, fn_vector, decode_fn, maximizing)
@@ -274,19 +250,21 @@ function result = truncationOperator_(archive, objective_values, M)
 end
 
 function result = comparePoints_(points, distances)
-  %[~, C] = size(distances);
-  %% FIXME: This is sometimes called with distances = [].
-  %% Should return a point at random in that case. (See commented elseif)
+  [~, C] = size(distances);
+  result = comparePointsRec_(points, distances, C);
+end
+
+function result = comparePointsRec_(points, distances, c)
   min_distance = min(distances(:, 1));
-  corresponding_points = find(distances == min_distance);
+  corresponding_points = find(distances(:, 1) == min_distance);
 
   count_same = length(corresponding_points);
   
   if (count_same == 1)
 	result = points(corresponding_points);
-  %elseif (C == 1)
-  %  result = points(corresponding_points(randi(count_same, 1))); 
+  elseif (c == 1)
+	result = points(corresponding_points(randi(count_same, 1))); 
   else
-    result = comparePoints_(corresponding_points, distances(corresponding_points, 2:end));
+    result = comparePointsRec_(corresponding_points, distances(corresponding_points, 2:end), c - 1);
   end
 end

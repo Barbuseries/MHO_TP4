@@ -1,13 +1,52 @@
 function Ga
   global GA;
   GA.showPaleto = @showPaleto_;
-  GA.defaultConfig = @defaultConfig;
+  GA.defaultConfig = @defaultConfig_;
   GA.make_new_pop = @make_new_pop;
   
   GA.create = @create_ga_;
 end
 
-function result = optimize(ga, maximizing, objective_vector, constraints, config)
+function result = defaultConfig_
+  	 %DEFAULTCONFIG_ Preconfigured genetic algorithm config.
+	 %
+	 % Fields
+	 %  N                  Population count
+	 %  G_max              Max iteration count
+	 %  l                  Chromosome length, in [1, 53]
+	 %  Pc                 Crossover probability
+	 %  Pm                 Mutation probability
+	 %  crossover_fn       Crossover function
+	 %  mutation_fn        Mutation function
+	 %  stop_criteria_fn   Stop criteria function
+	 %  clamp_fn           Clamp function, not used with binary values
+	 %
+	 % See also Selection, Crossover, Mutation,
+	 % StopCriteria, Clamp.
+  
+  global CROSSOVER;
+  global MUTATION;
+  global STOP_CRITERIA;
+  global CLAMP;
+  
+  result.N = 100;
+  result.G_max = 100;
+  
+  %% NOTE: 'binary' is just an integer representation (to get to the
+  % actual value => v = (i / maxI) * (c(1) - c(0)) + c(0), with c the
+  % constaints for this variable)
+  result.l = 12;
+  
+  result.Pc = 0.5;
+  result.Pm = 0.1;
+
+  result.crossover_fn = CROSSOVER.singlePoint;
+  result.mutation_fn = MUTATION.bitFlip;
+  result.stop_criteria_fn = STOP_CRITERIA.time;
+  result.clamp_fn = CLAMP.default;
+end
+
+function [result, h] = optimize(ga, maximizing, objective_vector, constraints, config)
   global UTILS;
   
   %% TODO: Parameter check and default value.
@@ -34,20 +73,25 @@ function result = optimize(ga, maximizing, objective_vector, constraints, config
 					  'decode_fn', decode_fn, ...
 					  'operator_context', context);
   
-  tic;
+  %%tic;
+
+  if (isfield(config, 'population'))
+	population = config.population;
+  else
+	population = initialGeneration_(N, constraints, l);
+  end
   
-  population = initialGeneration_(N, constraints, l);
-  result = ga.run(population, ga_context, config);
+  [result, h] = ga.run(population, ga_context, config);
   
-  toc;
+  %%toc;
 end
 
-function result = maximize(ga, objective_vector, constraints, config)
-  result = optimize(ga, 1, objective_vector, constraints, config);
+function [result, h] = maximize(ga, objective_vector, constraints, config)
+  [result, h] = optimize(ga, 1, objective_vector, constraints, config);
 end
 
-function result = minimize(ga, objective_vector, constraints, config)
-  result = optimize(ga, 0, objective_vector, constraints, config);
+function [result, h] = minimize(ga, objective_vector, constraints, config)
+  [result, h] = optimize(ga, 0, objective_vector, constraints, config);
 end
 
 function result = initialGeneration_(N, constraints, l)
@@ -126,107 +170,54 @@ function result = make_new_pop(mating_pool, l, crossover_fn, Pc, mutation_fn, Pm
 end
 
 
-%% TODO: Test 3D function plot
-function showPaleto_(problem, variables, plot_objective_domain)
+function [all_h, plot_legend] = showPaleto_(problem, variables, plot_optimal, algo_name, all_h, plot_legend)
   global UTILS;
-  figure(5)
-  clf;
   
-  if (~exist('plot_objective_domain', 'var'))
-      plot_objective_domain = false;
+  if (~exist('plot_optimal', 'var'))
+      plot_optimal = false;
   end
 
-  constraints = problem.constraints;
+  if (~exist('algo_name', 'var'))
+      algo_name = 'Pareto Front';
+  end
+  
+  if (~exist('all_h', 'var'))
+      all_h = [];
+  end
+  
+  if (~exist('plot_legend', 'var'))
+      plot_legend = cell(0);
+  end
+  
+  colors = ['r', 'b', 'g', 'k'];
+  shape = ['*', 'd', '+', '.'];
+  
   objective_vector = problem.objective_vector;
 
-  [~, var_count] = size(variables);
-  [~, fn_count] = size(objective_vector);
+  [~, fn_count] = size(objective_vector); 
 
-  can_plot_var = (var_count <= 3);
   can_plot_fn = (fn_count <= 3);
-  plot_count = can_plot_var + can_plot_fn;
   
-  if (var_count == 1)
-      m = 500;
-  elseif (var_count == 2)
-      m = 50;
-  else
-      m = 20;
-  end
-  
-  %% FIXME: This does not work if some constraints are different from the others
-  if (var_count == 1)
-    dx = meshgrid(UTILS.linspacea(constraints, m));  
-    dy = 0 * dx;
-    dz = 0 * dy;
-  elseif (var_count == 2)
-    [dx, dy] = meshgrid(UTILS.linspacea(constraints, m));
-    dz = 0 * dx;
-  else
-    [dx, dy, dz] = meshgrid(UTILS.linspacea(constraints, m));
-  end
-  
-  if (~can_plot_var)
-	warning('showPaleto: variables: can not plot in 4D, sorry!');
-  else
-	subplot(1, plot_count, 1);
-    hold on;
-
-    plotted_values = variables;
-    plot_axis = reshape(constraints', 1, []);
-    
-    %% Set plot's axis limits to constraints
-    if (var_count == 1)    
-        %% Set a fictional y to 0, for a prettier plot
-        plotted_values(:, end+1) = 0;
-        plot_axis = [plot_axis, -0.1, 0.1];
-    end
-    
-    axis(plot_axis);
-    
-    if (var_count == 3)
-        plot_fn = @plot3;
-        zlabel("z");
-    else    
-        plot_fn = @plot;
-    end
-    
-    xlabel("x");
-    ylabel("y");
-    title("Variables' space");
-    plotN_(plotted_values, plot_fn, 'r+');
-  end
-
   if (~can_plot_fn)
-	warning('showPaleto: variables: can not plot in 4D, sorry!');
+	warning('showPaleto: variables: can not plot in more than 3D, sorry!');
   else
-	subplot(1, plot_count, plot_count);
     hold on;
-
-    if (plot_objective_domain)
-        if (var_count == 1)
-            fz = evalFn_(objective_vector, dx);
-        elseif (var_count == 2)
-            fz = evalFn_(objective_vector, dx, dy);
-        else
-            fz = evalFn_(objective_vector, dx, dy, dz);
-        end
-
-        %% TODO: Test domain plot in 3D (no 3D function yet)
+    
+    if (plot_optimal)    
+        pareto_front = UTILS.evalFnVector(objective_vector, problem.optimal_solutions(1000));
+        
         if (fn_count == 3)
-            mesh(fz(:, :, 1), fz(:, :, 2), fz(:, :, 3));
+            plot_fn = @plot3;
         else
-            x = fz(:, :, 1);
-            y = fz(:, :, 2);
-            z = zeros(size(x));
-            C = gradient(x .* y);
-
-            mesh(x, y, z, C);
+            plot_fn = @plot;
         end
+        
+        all_h(end+1) = plotN_(pareto_front, plot_fn, 'k-', 'LineWidth', 1);
+        plot_legend{end+1} = 'Optimal pareto front';
     end
     
     values = UTILS.evalFnVector(objective_vector, variables);
-        
+       
     if (fn_count == 3)
         plot_fn = @plot3;
         zlabel("f3(X)");
@@ -237,9 +228,16 @@ function showPaleto_(problem, variables, plot_objective_domain)
     xlabel("f1(X)");
     ylabel("f2(X)");
     title("Objective's domain");
-    h = plotN_(values, plot_fn, 'r+');
     
-    legend(h, "Pareto front");
+    i = length(all_h);
+    style = sprintf('%c%c', colors(i), shape(i));
+    
+    all_h(end+1) = plotN_(values, plot_fn, style);
+    
+    plot_legend{end+1} = algo_name;
+    
+    legend(all_h, plot_legend);
+    title(sprintf('Pareto front on %s', problem.name));
   end
 end
 

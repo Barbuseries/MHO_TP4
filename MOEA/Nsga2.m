@@ -3,9 +3,10 @@ function Nsga2
 
   NSGA2.defaultConfig = @defaultConfig_;
   NSGA2.run = @run_;
+  NSGA2.name = "NSGA2";
 end
 
-function result = run_(population, ga_context, config)
+function [result, h] = run_(population, ga_context, config)
   global SELECTION;
   global GA;
   
@@ -30,6 +31,9 @@ function result = run_(population, ga_context, config)
 
   old_objective_values = [];
   g = 1;
+
+  h_template = struct('population', [], 'objective_values', []);
+  h = repmat(h_template, G_max, 1);
   
   [rank, ~, objective_values] = evalRankAndPop_(population, objective_vector, decode_fn, maximizing);
 
@@ -38,126 +42,58 @@ function result = run_(population, ga_context, config)
   selection = selection_fn(-rank);
   parents = population;
   mating_pool = parents(selection, :);
+
+  non_dominated = (rank == 1);
+  h(g).population = parents(non_dominated, :);
+  h(g).objective_values = objective_values(non_dominated, :);
   
   population = GA.make_new_pop(mating_pool, l, crossover_fn, Pc, mutation_fn, Pm, context);
 
   old_objective_values = objective_values;
   g = g + 1;
 
-  while (~((g == G_max) || stop_criteria_fn(objective_values, old_objective_values, maximizing)))
+  done = ((g == G_max) || stop_criteria_fn(objective_values, old_objective_values, maximizing));
+  while (~done)
+	if (l == -1)
+	  context.iteration = g;
+    end
+	
 	pool = vertcat(parents, population);
 	
 	%% Evaluation
-	[rank, ~, objective_values] = evalRankAndPop_(pool, objective_vector, decode_fn, maximizing);
+	[rank, real_values_pop, objective_values] = evalRankAndPop_(pool, objective_vector, decode_fn, maximizing);
+	
+	done = ((g == G_max) || stop_criteria_fn(objective_values, old_objective_values, maximizing));
 
-	%% TODO: Separate into own function?
-	new_population_count = 0;
-	indices_to_keep = zeros(1, N);
-
-	fitness_indices_to_keep = zeros(1, N);
-
-	no_overfill = true;
-	front_index = 1;
-
-	%% There is no do-while...
-	while (no_overfill)
-	  belong_to_front = (rank == front_index);
-	  front_indices = find(belong_to_front);
-	  
-	  belong_to_front_count = length(front_indices);
-
-	  front_crowding_distance = crowdingDistanceAssignment_(objective_values(front_indices, :));
-
-	  %% As long as we do not overfill, we can add all of it
-	  if ((belong_to_front_count + new_population_count) <= N)
-		append_indices = (new_population_count + 1):(new_population_count + belong_to_front_count);
-		
-		indices_to_keep(append_indices) = front_indices;
-		
-		[~, sorted_indices] = sort(-front_crowding_distance);
-        bias = zeros(1, belong_to_front_count);
-		bias(sorted_indices) = (1:belong_to_front_count) / (belong_to_front_count + 1);
-		fitness_indices_to_keep(append_indices) = front_index + bias;
-
-		new_population_count = new_population_count + belong_to_front_count;
-        
-        if (new_population_count == N)
-          break
-        else
-          front_index = front_index + 1;
-        end
-	  else
-		no_overfill = false;
-	  end
-	end
-
-	%% We can partially add the last front
-	if (new_population_count < N)
-	  remaining_count = N - new_population_count;
-	  
-	  [~, sorted_indices] = mink(-front_crowding_distance, remaining_count);
-
-	  abs_indices = front_indices(sorted_indices);
-	  
-	  indices_to_fill = (new_population_count+1):N;
-	  indices_to_keep(indices_to_fill) = abs_indices;
-	  
-	  bias = (1:remaining_count) / (remaining_count + 1);
-	  fitness_indices_to_keep(indices_to_fill) = front_index + bias;
-    end
-
+	%% Selection
+	[indices_to_keep, fitness_indices_to_keep] = fillFromFronts_(N, rank, objective_values);
 	parents = pool(indices_to_keep, :);
+
+	%% Minus sign: tournament selection compare by >, but fitness is better when <.
     selection = selection_fn(-fitness_indices_to_keep);
     mating_pool = parents(selection, :);
 
 	population = GA.make_new_pop(mating_pool, l, crossover_fn, Pc, mutation_fn, Pm, context);
 
+	non_dominated = (rank(indices_to_keep) == 1);
+	h(g).population = parents(non_dominated, :);
+	h(g).objective_values = objective_values(non_dominated, :);
+
 	old_objective_values = objective_values;
 	g = g + 1;
   end
 
-  [rank, real_values_pop, ~] = evalRankAndPop_(population, objective_vector, decode_fn, maximizing);
+  %% NOTE/TODO: If instead we return the children, we need to store result and the objective values into h.
+  %%[rank, real_values_pop, ~] = evalRankAndPop_(parents, objective_vector, decode_fn, maximizing);
   
-  result = real_values_pop((rank == 1), :);
+  result_indices = rank(indices_to_keep) == 1;
+  result = real_values_pop(indices_to_keep(result_indices), :);
 end
 
 function result = defaultConfig_
-	 %DEFAULTCONFIG_ Preconfigured genetic algorithm config.
-	 %
-	 % Fields
-	 %  N                  Population count
-	 %  G_max              Max iteration count
-	 %  l                  Chromosome length, in [1, 53]
-	 %  Pc                 Crossover probability
-	 %  Pm                 Mutation probability
-	 %  crossover_fn       Crossover function
-	 %  mutation_fn        Mutation function
-	 %  stop_criteria_fn   Stop criteria function
-	 %  clamp_fn           Clamp function, not used with binary values
-	 %
-	 % See also Selection, Crossover, Mutation,
-	 % StopCriteria, Clamp.
-  
-  global CROSSOVER;
-  global MUTATION;
-  global STOP_CRITERIA;
-  global CLAMP;
-  
-  result.N = 100;
-  result.G_max = 100;
-  
-  %% NOTE: 'binary' is just an integer representation (to get to the
-  % actual value => v = (i / maxI) * (c(1) - c(0)) + c(0), with c the
-  % constaints for this variable)
-  result.l = 12;
-  
-  result.Pc = 0.5;
-  result.Pm = 0.1;
+  global GA;
 
-  result.crossover_fn = CROSSOVER.singlePoint;
-  result.mutation_fn = MUTATION.bitFlip;
-  result.stop_criteria_fn = STOP_CRITERIA.time;
-  result.clamp_fn = CLAMP.default;
+  result = GA.defaultConfig();
 end
 
 function [rank, real_values_pop, objective_values] = evalRankAndPop_(population, fn_vector, decode_fn, maximizing)
@@ -167,6 +103,63 @@ function [rank, real_values_pop, objective_values] = evalRankAndPop_(population,
   objective_values = UTILS.evalFnVector(fn_vector, real_values_pop);
 
   rank = fastNonDominatedSort_(objective_values, maximizing);
+end
+
+function [indices_to_keep, fitness_indices_to_keep] = fillFromFronts_(N, rank, objective_values)
+  new_population_count = 0;
+  indices_to_keep = zeros(1, N);
+  fitness_indices_to_keep = zeros(1, N);
+
+  no_overfill = true;
+  front_index = 1;
+
+  %% There is no do-while...
+  while (no_overfill)
+	belong_to_front = (rank == front_index);
+	front_indices = find(belong_to_front);
+	
+	belong_to_front_count = length(front_indices);
+
+	front_crowding_distance = crowdingDistanceAssignment_(objective_values(front_indices, :));
+
+	%% As long as we do not overfill, we can add all of it
+	if ((belong_to_front_count + new_population_count) <= N)
+	  append_indices = (new_population_count + 1):(new_population_count + belong_to_front_count);
+	  
+	  indices_to_keep(append_indices) = front_indices;
+	  
+	  [~, sorted_indices] = sort(front_crowding_distance, 'descend');
+      bias = zeros(1, belong_to_front_count);
+	  bias(sorted_indices) = (1:belong_to_front_count) / (belong_to_front_count + 1);
+	  fitness_indices_to_keep(append_indices) = front_index + bias;
+
+	  new_population_count = new_population_count + belong_to_front_count;
+      
+      if (new_population_count == N)
+        break
+      else
+        front_index = front_index + 1;
+      end
+	else
+	  no_overfill = false;
+	end
+  end
+
+  %% We can partially add the last front
+  if (new_population_count < N)
+	remaining_count = N - new_population_count;
+	
+	[~, sorted_indices] = maxk(front_crowding_distance, remaining_count);
+
+	abs_indices = front_indices(sorted_indices);
+	
+	indices_to_fill = (new_population_count+1):N;
+	indices_to_keep(indices_to_fill) = abs_indices;
+	
+    bias = zeros(1, length(front_indices));
+	bias(sorted_indices) = (1:remaining_count) / (remaining_count + 1);
+	fitness_indices_to_keep(indices_to_fill) = front_index + bias(sort(sorted_indices));
+  end
 end
 
 function result = fastNonDominatedSort_(objective_values, maximizing)
