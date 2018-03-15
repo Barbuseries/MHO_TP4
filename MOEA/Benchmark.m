@@ -13,13 +13,14 @@ function result = run_(all_problems, all_algos, all_configs, count)
   algo_count = length(all_algos);
 
   result_template = struct('metrics', ...
-						   struct('distance', [], ...
+						   struct('convergence', [], ...
                                   'diversity', []));
   
   result = repmat(result_template, algo_count, problem_count, count);
   total_iteration_count = problem_count * count * algo_count;
   iteration = 1;
   start = datetime('now');
+
   for k = 1:problem_count
 	problem = all_problems{k};
     p_dummy = problem([]);
@@ -27,7 +28,16 @@ function result = run_(all_problems, all_algos, all_configs, count)
 	pareto_front = eval_problem(p_dummy.optimal_solutions(500));
 	
 	for i = 1:count
-	  %% initial_population = ...
+      initial_population = [];
+      all_Ns = cellfun(@(c) c.N, all_configs(:, k));
+      all_ls = cellfun(@(c) c.l, all_configs(:, k));
+      
+      all_equal = @(a) sum(a) == (a(1) * length(a));
+      if (all_equal(all_Ns) && all_equal(all_ls))
+          N = all_Ns(1); l = all_ls(1);
+          initial_population = GA.initialPopulation(N, p_dummy.constraints, l);
+      end          
+      
 	  for j = 1:algo_count
         ratio = (iteration / total_iteration_count);
         estimated_time = NaN;
@@ -44,12 +54,10 @@ function result = run_(all_problems, all_algos, all_configs, count)
 		
 		config = algo.defaultConfig();
 		config = mergeStruct(config, all_configs{j, k});
-		%% config.population = initial_population;
+		config.population = initial_population;
 
 		[~, h] = p.optimize(config);
 
-		%% TODO: Save data
-		%% TODO: Compute metrics
 		result(j, k, i).metrics = computeMetrics_({h.objective_values}, pareto_front);
 		
         iteration = iteration + 1;
@@ -64,34 +72,34 @@ function result = computeMetrics_(h, pareto_front)
   
   N = length(h);
 
-  result = struct('distance', zeros(1, N), 'diversity', zeros(1, N));
+  result = struct('convergence', zeros(1, N), 'diversity', zeros(1, N));
   [~, sorted_pareto_indices] = sort(pareto_front(:, 1));
   sorted_pareto_front = pareto_front(sorted_pareto_indices, :);
   
   for i = 1:N
 	obtained_pareto_front = h{i};
 	
-	if (isempty(obtained_pareto_front))
-      result.distance(i) = NaN;
+  	if (isempty(obtained_pareto_front))
+      result.convergence(i) = NaN;
     else
       [M, ~] = size(obtained_pareto_front);
       
-      %% Distance metric
+      %% Convergence metric
       all_min_distances_sq = zeros(M, 1);
       for n = 1:M
 		all_min_distances_sq(n) = min(sum((obtained_pareto_front(n, :) - pareto_front).^2, BY_ROW));
       end
 
-      result.distance(i) = mean(sqrt(all_min_distances_sq));
+      result.convergence(i) = mean(sqrt(all_min_distances_sq));
       
       %% Diversity metric
       if (M < 2)
         result.diversity(i) = NaN;
       else
-         distance_fn = @(a, b) sqrt(sum(((b - a)).^2, BY_ROW));
+        distance_fn = @(a, b) sqrt(sum(((b - a)).^2, BY_ROW));
           
         [~, sorted_indices] = sort(obtained_pareto_front(:, 1));
-        sorted_values = obtained_pareto_front(sorted_indices, :);  
+        sorted_values = obtained_pareto_front(sorted_indices, :);
         consecutive_distances = distance_fn(sorted_values(1:end-1, :), sorted_values(2:end, :));
         mean_consecutive_distance = mean(consecutive_distances);
       
@@ -109,69 +117,96 @@ function result = computeMetrics_(h, pareto_front)
   end
 end
 
-%% NOTE(for future me): Hello !
-%% a = [data(ALGO_INDEX, PROBLEM_INDEX, :).metrics];
-%% toto = reshape([a.distance], G_MAX, [])'; %% Reshape to have corresponding iterations on the same column.
-%% boxplot(toto);
-%% plot(1:G_MAX, mean(toto));
-
-function plot_(all_algos, all_problems, data, component, compare_exact) 
-    if (~exist('compare_exact', 'var'))
-       compare_exact = false;
-    end
+function plot_(all_algos, all_problems, data, compare_exact) 
+  if (~exist('compare_exact', 'var'))
+    compare_exact = false;
+  end
   
   [algo_count, problem_count, run_count] = size(data);
 
   colors = ['r', 'b', 'g', 'k'];
   shape = ['*', 'd', '+', '.'];
   
+  fields = fieldnames(data(1).metrics);
+  field_count = length(fields);
+	
   for j = 1:problem_count
-	figure(j);
+	figure(j + 30);
 	clf;
-    hold on;
+	hold on;
 	
     p = all_problems{j}([]);
-    
-    all_h = [];
-	for i = 1:algo_count
-	  a = [data(i, j, :).metrics];
-	  formated_data = log10(reshape([a.(component)], [], run_count)'); %% Reshape to have corresponding iterations on the same column.
-      formated_data(isinf(formated_data)) = 0;
-      [~, N] = size(formated_data);
-      
-      style = sprintf('%c%c%s', colors(i), shape(i), '-');
-	  
-      if (compare_exact)
-        h = boxplot(formated_data, 'colors', colors(i));
-      else
-        h = plot(1:N, mean(formated_data, 'omitnan'), style, 'MarkerSize', 4);
+
+	for only_last_gen = 0:1
+	  for k = 1:field_count
+		component = fields{k};
+		subplot(field_count, 2, field_count * only_last_gen + k);
+		hold on;
+		
+		all_h = [];
+		
+		if (only_last_gen)
+          a = [data(:, j, :).metrics];
+          formated_data = zeros(run_count, algo_count);
+          temp_data = reshape(a, algo_count, []);
+          
+          %% NOTE: I could probably one-line or two-line this, but it is starting to make my head hurt, so not today.
+          for i = 1:algo_count
+			temp_data2 = [temp_data(i, :).(component)];
+			N = numel(temp_data2) / run_count;
+			formated_data(:, i) = log10(temp_data2(N:N:end));
+          end
+%formated_data = (reshape([a.(component)], [], run_count, algo_count));
+%formated_data = permute(formated_data(end, :, :), [3, 2, 1])';
+%formated_data(isinf(formated_data)) = 0;
+%formated_data(:, 1:end) = formated_data(:, end:-1:1);
+          boxplot(formated_data, 'colors', colors, ...,
+                  'Labels', cellstr([all_algos.name]), ...
+                  'Notch', 'on');
+          
+		else
+          for i = 1:algo_count
+			a = [data(i, j, :).metrics];
+			formated_data = log10(reshape([a.(component)], [], run_count)'); %% Reshape to have corresponding iterations on the same column.
+							 %formated_data(isinf(formated_data)) = 0;
+
+			[~, N] = size(formated_data);
+
+			style = sprintf('%c%c%s', colors(i), shape(i), '-');
+
+			if (compare_exact)
+              boxplot(formated_data, 'colors', colors(i), 'Symbol', shape(i), ...
+                      'PlotStyle', 'Compact', 'BoxStyle', 'outline');
+
+              labels = 1:20:N;
+            
+              set(gca, 'XTick', labels);
+              set(gca, 'XTickLabel', labels);
+			else
+              h = plot(1:N, mean(formated_data, 'omitnan'), style, 'MarkerSize', 4);
+			end
+
+			xlabel('Iteration');
+			ylabel('Metric (Log10)');
+
+			if (~compare_exact)
+              all_h(end+1) = h;
+			end
+          end
+
+          if (~compare_exact)
+			legend(all_h, [all_algos.name]);
+          end
+		end
+
+		if (only_last_gen)
+		  title_format = 'Comparison of the %s metric on %s (result)';
+		else
+		  title_format = 'Comparison of the %s metric on %s';
+		end
+
+		title(sprintf(title_format, component, p.name));
       end
-      
-      xlabel('Iteration');
-      ylabel('Metric (Log10)');
-      
-      all_h(end+1) = h;
-    end
-    
-    legend(all_h, [all_algos.name]);
-    title(sprintf('Comparison of the %s metric on %s', component, p.name));
+	end
   end
 end
-
-
-%% function [v, v2, l] = Benchmark(p, config, count, leg, v, v2, l)
-%%   benchmark(1:count) = struct('h', 0);
-
-%%   for i = 1:count
-%%     [~, h] = p.optimize(config);
-%%     benchmark(i).h = h;
-%%     disp(i)
-%%   end
-  
-%%   a = [benchmark.h];
-%%   b = [a.very_best];
-%%   iteration_counts = cellfun(@length, {a.iterations});
-%%   v(:, end+1) = iteration_counts';
-%%   v2(:, end+1) = [b.fitness]';
-%%   l(end+1) = {leg};
-%% end

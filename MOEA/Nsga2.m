@@ -83,9 +83,6 @@ function [result, h] = run_(population, ga_context, config)
 	g = g + 1;
   end
 
-  %% NOTE/TODO: If instead we return the children, we need to store result and the objective values into h.
-  %%[rank, real_values_pop, ~] = evalRankAndPop_(parents, objective_vector, decode_fn, maximizing);
-  
   result_indices = rank(indices_to_keep) == 1;
   result = real_values_pop(indices_to_keep(result_indices), :);
 end
@@ -127,7 +124,22 @@ function [indices_to_keep, fitness_indices_to_keep] = fillFromFronts_(N, rank, o
 	  append_indices = (new_population_count + 1):(new_population_count + belong_to_front_count);
 	  
 	  indices_to_keep(append_indices) = front_indices;
-	  
+
+	  %% NOTE: We should use the distance to compare points on the
+	  %% same front during the selection. However, the selection only
+	  %% takes a 'fitness' values when comparing individuals. This
+	  %% fitness is also based on the front index (rank).
+	  %% To make distance comparison work, for a given individual
+	  %% belonging to a front i, we assign this individual a value
+	  %% in]0, 1[, such that if the distance associated to the
+	  %% individual I is greater than the individual J's,
+	  %% val(I) < val(J) (because the fitness is better the lower it
+	  %% is).
+	  %% This is done by sorting the individual based on their
+	  %% distance here, and assigning their index in this array
+	  %% (divided by their count + 1 (to get a number in ]0, 1[)).
+	  %% The same trick is done when we can partially add a
+	  %% front. (See below)
 	  [~, sorted_indices] = sort(front_crowding_distance, 'descend');
       bias = zeros(1, belong_to_front_count);
 	  bias(sorted_indices) = (1:belong_to_front_count) / (belong_to_front_count + 1);
@@ -155,10 +167,14 @@ function [indices_to_keep, fitness_indices_to_keep] = fillFromFronts_(N, rank, o
 	
 	indices_to_fill = (new_population_count+1):N;
 	indices_to_keep(indices_to_fill) = abs_indices;
-	
+
+	%% As sorted_indices is relative to front_crowding_distances, it
+	%% may contain indices greater than remaining_count.
+	%% So, first create a big enough array, assign and then extract
+	%% only the values we need.
     bias = zeros(1, length(front_indices));
 	bias(sorted_indices) = (1:remaining_count) / (remaining_count + 1);
-	fitness_indices_to_keep(indices_to_fill) = front_index + bias(sort(sorted_indices));
+	fitness_indices_to_keep(indices_to_fill) = front_index + bias(sorted_indices);
   end
 end
 
@@ -180,9 +196,12 @@ function result = fastNonDominatedSort_(objective_values, maximizing)
   for i = 1:N
       domination = sum(relation(objective_values(i, :), objective_values), BY_ROW)' == fn_count;
     
-      %% In case multiple points have the same values, we are both dominated and dominators of those other points.
-      %% In that case, we do not want to consider them as being dominated or dominators.
-      %% As we also check the point itself, this also takes care of that.
+      %% In case multiple points have the same values, we are both
+      %% dominated and dominators of those other points.
+      %% In that case, we do not want to consider them as being
+      %% dominated or dominators.
+      %% As we also check the point itself, this also takes care of
+      %% that.
       is_dominated = (domination == 1);
       is_same = sum(objective_values(i, :) == objective_values(is_dominated, :), BY_ROW)' == fn_count;
       
@@ -200,8 +219,6 @@ function result = fastNonDominatedSort_(objective_values, maximizing)
 	rel_front_indices = find(point_dominators_count(indices_to_compare) == 0);
 	front_indices_count = length(rel_front_indices);
 	
-	assert(front_indices_count ~= 0);
-
 	abs_front_indices = indices_to_compare(rel_front_indices);
 	result(abs_front_indices) = front_index;
 

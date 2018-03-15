@@ -1,8 +1,11 @@
 function Ga
   global GA;
+
+  GA.iterativeShowPaleto = @iterativeShowPaleto_;
   GA.showPaleto = @showPaleto_;
   GA.defaultConfig = @defaultConfig_;
   GA.make_new_pop = @make_new_pop;
+  GA.initialPopulation = @initialPopulation_;
   
   GA.create = @create_ga_;
 end
@@ -75,10 +78,10 @@ function [result, h] = optimize(ga, maximizing, objective_vector, constraints, c
   
   %%tic;
 
-  if (isfield(config, 'population'))
+  if (isfield(config, 'population') && ~isempty(config.population))
 	population = config.population;
   else
-	population = initialGeneration_(N, constraints, l);
+	population = initialPopulation_(N, constraints, l);
   end
   
   [result, h] = ga.run(population, ga_context, config);
@@ -94,7 +97,7 @@ function [result, h] = minimize(ga, objective_vector, constraints, config)
   [result, h] = optimize(ga, 0, objective_vector, constraints, config);
 end
 
-function result = initialGeneration_(N, constraints, l)
+function result = initialPopulation_(N, constraints, l)
   global UTILS;
   
   if (l == -1)
@@ -170,7 +173,7 @@ function result = make_new_pop(mating_pool, l, crossover_fn, Pc, mutation_fn, Pm
 end
 
 
-function [all_h, plot_legend] = showPaleto_(problem, variables, plot_optimal, algo_name, all_h, plot_legend)
+function [all_h, plot_legend] = iterativeShowPaleto_(problem, variables, plot_optimal, algo_name, all_h, plot_legend)
   global UTILS;
   
   if (~exist('plot_optimal', 'var'))
@@ -191,6 +194,72 @@ function [all_h, plot_legend] = showPaleto_(problem, variables, plot_optimal, al
   
   colors = ['r', 'b', 'g', 'k'];
   shape = ['*', 'd', '+', '.'];
+  
+  objective_vector = problem.objective_vector;
+
+  [~, fn_count] = size(objective_vector); 
+
+  can_plot_fn = (fn_count <= 3);
+  
+  if (~can_plot_fn)
+	warning('showPaleto: variables: can not plot in more than 3D, sorry!');
+  else
+    hold on;
+    
+    if (plot_optimal && (length(all_h) == 0))    
+        pareto_front = UTILS.evalFnVector(objective_vector, problem.optimal_solutions(1000));
+        
+        if (fn_count == 3)
+            plot_fn = @plot3;
+        else
+            plot_fn = @plot;
+        end
+        
+        all_h(end+1) = plotN_(pareto_front, plot_fn, 'k-', 'LineWidth', 1);
+        plot_legend{end+1} = 'Optimal pareto front';
+    end
+    
+    values = UTILS.evalFnVector(objective_vector, variables);
+       
+    if (fn_count == 3)
+        plot_fn = @plot3;
+        zlabel("f3(X)");
+    else
+        plot_fn = @plot;
+    end
+  
+    xlabel("f1(X)");
+    ylabel("f2(X)");
+    title("Objective's domain");
+    
+    i = length(all_h) + ~plot_optimal;
+    style = sprintf('%c%c', colors(i), shape(i));
+    
+    all_h(end+1) = plotN_(values, plot_fn, style);
+    
+    plot_legend{end+1} = algo_name;
+    
+    legend(all_h, plot_legend);
+    title(sprintf('Pareto front on %s', problem.name));
+  end
+end
+
+function showPaleto_(problem, variables, plot_optimal, algo_name)
+  global UTILS;
+  figure(42)
+  clf;
+  hold on;
+  
+  if (~exist('plot_optimal', 'var'))
+      plot_optimal = false;
+  end
+
+  if (~exist('algo_name', 'var'))
+      algo_name = 'Pareto Front';
+  end
+  
+  all_h = [];
+  plot_legend = cell(0);
   
   objective_vector = problem.objective_vector;
 
@@ -229,9 +298,7 @@ function [all_h, plot_legend] = showPaleto_(problem, variables, plot_optimal, al
     ylabel("f2(X)");
     title("Objective's domain");
     
-    i = length(all_h);
-    style = sprintf('%c%c', colors(i), shape(i));
-    
+    style = 'r*';
     all_h(end+1) = plotN_(values, plot_fn, style);
     
     plot_legend{end+1} = algo_name;

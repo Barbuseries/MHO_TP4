@@ -52,32 +52,25 @@ function [result, h] = run_(population, ga_context, config)
 	
 	if (done)
 	  non_dominated = fitness(indices_to_archive) < 1;
-	  
-	  %% TODO/FIXME: In case non_dominated is empty (no global non
-	  %% dominated solution was found), we need to check if, among the
-	  %% indices in archive, any individual is non dominated (we only
-	  %% do a check on global elements (hence fitness < 1), but if no
-	  %% global non dominated solution was found, some may be non
-	  %% dominated _inside_ the solutions in the archive only).
-	  %% For now, this asserts has not fired, but who knows...
-      %%
-	  %% assert(sum(non_dominated) > 0);
-	  
+
       corresponding_values = real_values_pop(indices_to_archive, :);
+      corresponding_objective_values = objective_values(indices_to_archive, :);
 
 	  result = corresponding_values(non_dominated, :);
 	  
 	  h(g).population = result;
-	  h(g).objective_values = objective_values(non_dominated, :);
+	  h(g).objective_values = corresponding_objective_values(non_dominated, :);
 	else
 	  archive = pool(indices_to_archive, :);
 	  archive_fitness = fitness(indices_to_archive);
+      archive_values = objective_values(indices_to_archive, :);
 
 	  non_dominated = archive_fitness < 1;
 	  h(g).population = archive(non_dominated, :);
-	  h(g).objective_values = objective_values(non_dominated, :);
+	  h(g).objective_values = archive_values(non_dominated, :);
 	  
-	  %% Minus sign: tournament selection compare by >, but fitness is better when <.
+	  %% Minus sign: tournament selection compare by >, but fitness is
+	  %% better when <.
 	  selection = selection_fn(-archive_fitness);
 	  mating_pool = archive(selection, :);
 
@@ -126,7 +119,6 @@ function result = rawFitness_(objective_values, maximizing)
    relation = @le;  %% i dominates j, all objective values of i <= objective values of j
  end
   
-  %%TODO(@perf): Is there a way to remove the for-loop(s)?
   for i = 1:N
     %% dominated = all(objective_values(i, :) <= objective_values, BY_ROW); %% SLOWER!
 	dominated = sum(relation(objective_values(i, :), objective_values), BY_ROW) == fn_count;
@@ -147,7 +139,6 @@ function result = densityEstimation_(objective_values)
   
   result = zeros(1, N);
 
-  %%TODO(@perf): Is there a way to remove the for-loop?
   for i = 1:N
 	distances = sum((objective_values - objective_values(i, :)).^2, BY_ROW);
 	sorted_distances = mink(distances, k + 1); %% Because we also check the point itself.
