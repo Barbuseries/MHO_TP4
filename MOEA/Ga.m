@@ -6,6 +6,8 @@ function Ga
   GA.defaultConfig = @defaultConfig_;
   GA.make_new_pop = @make_new_pop;
   GA.initialPopulation = @initialPopulation_;
+  GA.crossover = @crossover_all_;
+  GA.mutate = @mutate_;
   
   GA.create = @create_ga_;
 end
@@ -120,6 +122,34 @@ function result = create_ga_(ga)
   result.minimize = @(varargin) minimize(ga, varargin{:});
 end
 
+function result = crossover_all_(mating_pool, crossover_fn, context)
+  
+  %% Modify mating pool to have an array of [i, j] (two individuals on
+  %% the same row), so we do not have to introduce an explicit loop
+  %% (usually slower) to compute the crossover of each parent pair.
+  var_count = length(mating_pool(1, :));
+  mating_pool = reshape(mating_pool', 2 * var_count, [])';
+
+  %% Pair separation
+  min_b = 1:var_count; %% The first half (first individual)
+  max_b = (var_count+1):(var_count * 2); %% The second half (second individual)
+
+  %% NOTE/TODO?: Instead of separating the variables, we could
+  %% concatenated them (shift each by l*i bits and directly apply the
+  %% crossover and mutation over the resulting integer) and split them
+  %% after everything is done. This could, potentialy, speed up the
+  %% computation.
+  %% Howewer, octave has a limit of 53 bits (at least, bitset limits
+  %% the index to 53), which means we would be limited to 53 /
+  %% var_count bits per variable. (var_count = 3 => 17 bits)
+  %% (By handling them separately, we do not have _any_ limitation)
+  after_crossover = crossover_fn(mating_pool(:, min_b), mating_pool(:, max_b), context);
+
+  %% Flatten the result to have [i1; i2; ...] again, instead of
+  %% [ [i1, i2]; [i3, i4]; ... ]
+  result = reshape(after_crossover', var_count, [])';
+end
+
 function result = crossover_(mating_pool, crossover_fn, Pc, context)
   
   %% Modify mating pool to have an array of [i, j] (two individuals on
@@ -156,11 +186,9 @@ function result = crossover_(mating_pool, crossover_fn, Pc, context)
   result = reshape([unchanged; go_through_crossover]', var_count, [])';
 end
 
-function result = make_new_pop(mating_pool, l, crossover_fn, Pc, mutation_fn, Pm, context)
-  [N, var_count] = size(mating_pool);
+function result = mutate_(population, l, mutation_fn, Pm, context)
+  [N, var_count] = size(population);
   
-  children = crossover_(mating_pool, crossover_fn, Pc, context);
-
   %% Every allele that needs to mutate is 1 at the correponding index
   if (l == -1)
 	mutations = rand(N, var_count, 1) <= Pm;
@@ -169,7 +197,14 @@ function result = make_new_pop(mating_pool, l, crossover_fn, Pc, mutation_fn, Pm
   end
 
   %% Mutation
-  result = mutation_fn(children, mutations, context);
+  result = mutation_fn(population, mutations, context);
+end
+
+function result = make_new_pop(mating_pool, l, crossover_fn, Pc, mutation_fn, Pm, context)
+  [N, var_count] = size(mating_pool);
+  
+  children = crossover_(mating_pool, crossover_fn, Pc, context);
+  result = mutate_(children, l, mutation_fn, Pm, context);
 end
 
 
@@ -206,7 +241,7 @@ function [all_h, plot_legend] = iterativeShowPaleto_(problem, variables, plot_op
   else
     hold on;
     
-    if (plot_optimal && (length(all_h) == 0))    
+    if (plot_optimal && isempty(all_h))    
         pareto_front = UTILS.evalFnVector(objective_vector, problem.optimal_solutions(1000));
         
         if (fn_count == 3)

@@ -12,6 +12,7 @@ Clamp;         global CLAMP;
 Ga;            global GA;
 Spea2;         global SPEA2;
 Nsga2;         global NSGA2;
+Pesa;          global PESA;
 Problem;       global PROBLEM;
 Benchmark;     global BENCHMARK;
 
@@ -53,11 +54,11 @@ for i = 1:length(all_var_counts)
     end
 end
 
-all_algos = [NSGA2, SPEA2];
+all_algos = [NSGA2, SPEA2, PESA];
 
 
 %% Set this to any of the above.
-doing = COMPARING;
+doing = BENCHMARKING;
 if (doing == BENCHMARKING)
     all_configs = cell(length(all_algos), length(all_problems));
 
@@ -113,14 +114,21 @@ elseif (doing == COMPARING)
             p = all_problems{j}(algo);
 
             config = algo.defaultConfig();
+            config.l = 52;
             config.Pc = 0.9;
-            config.Pm = 1 / all_var_counts(j);
+            config.Pm = 1 / config.l;
             config.N = 100;
+            if (i == 3)
+                config.N = 10;
+                config.C = 32;
+                config.G_max = 1000;
+            end
             config.M = 100;
             config.G_max = 250;
-            config.l = -1;
-            config.crossover_fn = CROSSOVER.simulatedBinary(20);
-            config.mutation_fn = MUTATION.polynomial(20);
+            %%config.crossover_fn = CROSSOVER.simulatedBinary(20);
+            %%config.mutation_fn = MUTATION.polynomial(20);
+            config.crossover_fn = CROSSOVER.uniform(0.5);
+            config.mutation_fn = MUTATION.bitFlip;
             %config.stop_criteria_fn = STOP_CRITERIA.meanChangeRate(0.005);
 
             [r, h] = p.optimize(config);

@@ -12,6 +12,7 @@ Clamp;         global CLAMP;
 Ga;            global GA;
 Spea2;         global SPEA2;
 Nsga2;         global NSGA2;
+Pesa;          global PESA;
 Problem;       global PROBLEM;
 
 
@@ -23,19 +24,22 @@ if (PROFILING)
   profile on;
 end
 
-algo = GA.create(NSGA2);
+algo = GA.create(PESA);
 
-p = PROBLEM.schaffer(algo);
+p = PROBLEM.zdt3(algo, 30);
 
 config = algo.defaultConfig();
-config.Pc = 0.9;
-config.Pm = 1 / 5;
-config.N = 100;
-config.M = 100;
-config.G_max = 250;
-config.l = -1;
-config.crossover_fn = CROSSOVER.simulatedBinary(20);
-config.mutation_fn = MUTATION.polynomial(20);
+config.l = 52;
+config.Pc = 0.7;
+config.Pm = 1 / config.l;
+config.C = 64;
+config.N = 200;
+config.M = 1000;
+config.G_max = 1000;
+%%config.crossover_fn = CROSSOVER.simulatedBinary(20);
+%%config.mutation_fn = MUTATION.polynomial(20);
+config.crossover_fn = CROSSOVER.uniform(0.5);
+config.mutation_fn = MUTATION.bitFlip;
 %%config.stop_criteria_fn = STOP_CRITERIA.meanChangeRate(0.005);
 
 [r, h] = p.optimize(config);

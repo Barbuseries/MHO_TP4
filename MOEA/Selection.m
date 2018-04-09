@@ -60,7 +60,7 @@ function h = tournament(k, c)
 	   % PROBABILITIES, C) when given PROBABILITIES.
 	   %   H = TOURNAMENT(K, C = N)
 	   %
-	   % 1 <= K <= N, with N = length(PROBABILITIES)
+	   % 1 <= K
 	   %
 	   % See also SELECTION>UNBIASEDTOURNAMENT, SELECTION>TOURNAMENT_.
   
@@ -69,10 +69,18 @@ function h = tournament(k, c)
   end
   
   if ~exist('c', 'var')
-      h = @(p) tournament_(k, p, length(p));
+      h = @(varargin) tournament_c_(k, varargin{:});
   else
       h = @(p) tournament_(k, p, c);
   end
+end
+
+function result = tournament_c_(k, probabilities, count)
+  if (~exist('count', 'var'))
+	count = length(probabilities);
+  end
+
+  result = tournament_(k, probabilities, count);
 end
 
 function result = tournament_(k, probabilities, count)
@@ -82,10 +90,6 @@ function result = tournament_(k, probabilities, count)
 % See also SELECTION>TOURNAMENT, SELECTION>UNBIASEDTOURNAMENT.
   
   N = length(probabilities);
-
-  if (k > N)
-	error('K must be in [1, N]');
-  end
 
   %% For each selection, select  which k elements we compare.
   random_indices = randi(N, count, k);
