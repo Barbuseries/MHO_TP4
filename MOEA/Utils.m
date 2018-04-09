@@ -148,7 +148,7 @@ function result = select_octave(probabilities, values)
   result = (length(probabilities) + 1) - sum(cumulative_sum >= values, BY_ROW);
 end
 
-%% IMPORTANT: Repat pool row-wise.
+%% IMPORTANT: Repeat pool row-wise.
 function result = fillFrom(pool, n)
   [N, M] = size(pool);
 

@@ -32,13 +32,15 @@ function [result, h] = run_(internal_population, ga_context, config)
   external_population = [];
   external_population_objective_values = [];
   external_population_grid_index = [];
+
+  all_grid_indices = [];
+  all_squeeze_factors = [];
   
-  grid_indices = [];
-  grid_squeeze_factors = [];
+  hyper_grid_fn = [];
+  grid_lower_bounds = [];
+  grid_upper_bounds = [];
   
   selection_fn = SELECTION.tournament(2);
-
-  hyper_grid_fn = hyper_grid_indexing_(ga_context.constraints, C);
 
   old_external_population_objective_values = [];
   g = 1;
@@ -53,15 +55,19 @@ function [result, h] = run_(internal_population, ga_context, config)
     end
 	
 	%% Evaluation
-	[non_dominated, real_values_pop, objective_values] = evalFitnessAndPop_(internal_population, objective_vector, decode_fn, maximizing);
+	[non_dominated, ~, objective_values] = evalFitnessAndPop_(internal_population, objective_vector, decode_fn, maximizing);
 
 	population_to_archive = internal_population(non_dominated, :);
 	corresponding_objective_values = objective_values(non_dominated, :);
-	corresponding_grid_index = hyper_grid_fn(real_values_pop(non_dominated, :));
 	
-	[external_population, external_population_objective_values, external_population_grid_index, squeeze_factor, grid_indices, grid_squeeze_factors] = ...
-	updateArchive_(population_to_archive, corresponding_objective_values, corresponding_grid_index, ...
-				   external_population, external_population_objective_values, external_population_grid_index, maximizing, M, grid_indices, grid_squeeze_factors);
+	[external_population, external_population_objective_values, ...
+	 external_population_grid_index, squeeze_factor, ...
+	 hyper_grid_fn, grid_lower_bounds, grid_upper_bounds, ...
+	 all_grid_indices, all_squeeze_factors] = updateArchive_(population_to_archive, corresponding_objective_values, ...
+																  external_population, external_population_objective_values, ...
+																  external_population_grid_index, maximizing, M, C, ...
+																  hyper_grid_fn, grid_lower_bounds, grid_upper_bounds, ...
+																  all_grid_indices, all_squeeze_factors);
 
 	done = ((g == G_max) || stop_criteria_fn(external_population_objective_values, old_external_population_objective_values, maximizing));
 	
@@ -166,25 +172,24 @@ function [dominators, dominates] = domination_status_(a, b, maximizing)
   else
 	relation = @le;  %% i dominates j, all objective values of i <= objective values of j
   end
-
-  domination_fn = @(x, y) (sum(relation(x, y), BY_ROW) == fn_count) & ~(sum(x == y, BY_ROW) == fn_count);
   
   for i = 1:N
-	dominates(i, :) = domination_fn(a(i, :), b);
+    dominates(i, :) = (sum(relation(a(i, :), b), BY_ROW) == fn_count) & ~(sum(a(i, :) == b, BY_ROW) == fn_count);
   end
   
   for i = 1:N
-	dominators(i, :) = domination_fn(b, a(i, :));
+    dominators(i, :) = (sum(relation(b, a(i, :)), BY_ROW) == fn_count) & ~(sum(b == a(i, :), BY_ROW) == fn_count);
   end
 end
 
 function [external_population, external_population_objective_values, ...
-          external_population_grid_index, squeeze_factor, ...
+          external_population_grid_index, squeeze_factor, ...,
+		  hyper_grid_fn, grid_lower_bounds, grid_upper_bounds, ...
           all_grid_indices, all_squeeze_factors] = updateArchive_(population, population_objective_values, ...
-                                                                  population_grid_index, external_population, ...
-                                                                  external_population_objective_values, ...
-                                                                  external_population_grid_index, maximizing, M, ...
-                                                                  all_grid_indices, all_squeeze_factors)
+                                                    			  external_population, external_population_objective_values, ...
+												 				  external_population_grid_index, maximizing, M, C, ...
+																  hyper_grid_fn, grid_lower_bounds, grid_upper_bounds, ...
+																  all_grid_indices, all_squeeze_factors)
   [population_count, ~] = size(population);
   [old_M, ~] = size(external_population);
   
@@ -208,81 +213,102 @@ function [external_population, external_population_objective_values, ...
 	if (sum(individual_dominators) ~= 0)
 	  continue;
 	end
-	
-	grid_index = population_grid_index(i);
 
 	archive_dominated = find(dominates(i, :));
 	archive_dominated_count = length(archive_dominated);
-
-	%% Get, for a given grid index, the number of individuals to remove.
-	[grid_index_to_update, squeeze_factor_diff] = get_squeeze_factor_by_index_(external_population_grid_index(archive_dominated));
-
-	%% Individual is now inactive and will be removed after the loop is done.
-	external_population_grid_index(archive_dominated) = -1;
 
 	%% An inactive element is not relevent anymore as a dominator or
 	%% as dominated.
 	dominators(:, archive_dominated) = 0;
 	dominates(:, archive_dominated) = 0;
 
-	modified_squeeze_factor_count = length(grid_index_to_update);
-
-	updated_new_element_grid_index_during_remove = 0;
-	start_index_search = 1;
-	for j = 1:modified_squeeze_factor_count
-	  update_index = grid_index_to_update(j);
-	  update_diff = squeeze_factor_diff(j);
-
-	  %% NOTE: As all_grid_indices is guaranteed to be sorted, we can
-	  %% start the search after the previously found index.
-	  index_in_table = (start_index_search - 1) + find(all_grid_indices(start_index_search:end) == update_index, 1);
-	  entry_squeeze_factor = all_squeeze_factors(index_in_table);
-
-	  index_is_same_as_new_element = (update_index == grid_index);
-	  all_squeeze_factors(index_in_table) = entry_squeeze_factor - update_diff + index_is_same_as_new_element;
-
-	  if (index_is_same_as_new_element)
-		updated_new_element_grid_index_during_remove = 1;
-	  end
-
-	  start_index_search = index_in_table + 1;
-	end
-
-	if (~updated_new_element_grid_index_during_remove)
-	  index_in_table = find(all_grid_indices >= grid_index, 1);
-
-	  if (isempty(index_in_table))
-		all_grid_indices = [all_grid_indices, grid_index];
-		all_squeeze_factors = [all_squeeze_factors, 1];
-      elseif (all_grid_indices(index_in_table) > grid_index)
-		all_grid_indices(index_in_table:end+1) = [grid_index, all_grid_indices(index_in_table:end)];
-		all_squeeze_factors(index_in_table:end+1) = [1, all_squeeze_factors(index_in_table:end)];
-      else
-          all_squeeze_factors(index_in_table) = all_squeeze_factors(index_in_table) + 1;
-	  end
-	end
+	values = population_objective_values(i, :);
 
 	%% TODO (@perf): See if this takes too much time.
 	%% (Instead, we could pre-resize the external population to be N +
 	%% M and just strip the excess later).
-	external_population = [external_population; population(i, :)];
-	external_population_objective_values = [external_population_objective_values; population_objective_values(i, :)];
-	external_population_grid_index = [external_population_grid_index, population_grid_index(i)];
+	external_population(end+1, :) = population(i, :);
+	external_population_objective_values(end+1, :) = values;
+
+	%% If the grid does not need to change, we do not need to change
+	%% the grid indices of each active element, therefore we can just
+	%% for each element in archive_dominated, remove 1 to the
+	%% corresponding squeeze factor, as well as add 1 to the squeeze
+	%% factor of the newly added element.
+	if (~grid_needs_to_change_(external_population_objective_values, grid_lower_bounds, grid_upper_bounds))
+      grid_index = hyper_grid_fn(values);
+	  external_population_grid_index(end+1) = grid_index;
+
+	  %% Get, for a given grid index, the number of individuals to remove.
+	  [grid_index_to_update, squeeze_factor_diff] = get_squeeze_factor_by_index_(external_population_grid_index(archive_dominated));
+
+	  %% Individual is now inactive and will be removed after the loop is done.
+	  external_population_grid_index(archive_dominated) = -1;
+
+	  modified_squeeze_factor_count = length(grid_index_to_update);
+
+	  updated_new_element_grid_index_during_remove = 0;
+	  start_index_search = 1;
+	  for j = 1:modified_squeeze_factor_count
+		update_index = grid_index_to_update(j);
+		update_diff = squeeze_factor_diff(j);
+
+		%% NOTE: As all_grid_indices is guaranteed to be sorted, we can
+		%% start the search after the previously found index.
+		index_in_table = (start_index_search - 1) + find(all_grid_indices(start_index_search:end) == update_index, 1);
+		entry_squeeze_factor = all_squeeze_factors(index_in_table);
+
+		index_is_same_as_new_element = (update_index == grid_index);
+		all_squeeze_factors(index_in_table) = entry_squeeze_factor - update_diff + index_is_same_as_new_element;
+
+		if (index_is_same_as_new_element)
+		  updated_new_element_grid_index_during_remove = 1;
+		end
+
+		start_index_search = index_in_table + 1;
+	  end
+
+	  if (~updated_new_element_grid_index_during_remove)
+		index_in_table = find(all_grid_indices >= grid_index, 1);
+
+		if (isempty(index_in_table))
+		  all_grid_indices(end+1) = grid_index;
+		  all_squeeze_factors(end+1) = 1;
+		elseif (all_grid_indices(index_in_table) > grid_index)
+		  all_grid_indices(index_in_table:end+1) = [grid_index, all_grid_indices(index_in_table:end)];
+		  all_squeeze_factors(index_in_table:end+1) = [1, all_squeeze_factors(index_in_table:end)];
+		else
+          all_squeeze_factors(index_in_table) = all_squeeze_factors(index_in_table) + 1;
+		end
+	  end
+	else
+	  %% Individual is now inactive and will be removed after the loop is done.
+	  external_population_grid_index(archive_dominated) = -1;
+      external_population_grid_index(end+1) = 0; %% Dummy value so this new element is taken into account (it just needs to be ~= -1).
+	  
+      %% TODO: See if making a function out of this is not too expensive.
+      active_elements = (external_population_grid_index ~= -1);
+      active_values = external_population_objective_values(active_elements, :);
+      
+	  [hyper_grid_fn, grid_lower_bounds, grid_upper_bounds] = make_grid_(active_values, C);
+	  external_population_grid_index(active_elements) = hyper_grid_fn(active_values);
+	  
+	  [all_grid_indices, all_squeeze_factors] = get_squeeze_factor_by_index_(external_population_grid_index(active_elements));
+	end
 
 	current_M = current_M - archive_dominated_count + 1;
-
+ 	
 	if (current_M > M)
 	  [max_squeeze_factor, ~] = max(all_squeeze_factors);
 	  all_max_squeeze_factors_indices = find(all_squeeze_factors == max_squeeze_factor);
 
+	  %% TODO: Make random_element function. 
       squeeze_factor_to_update = all_max_squeeze_factors_indices(randi(length(all_max_squeeze_factors_indices), 1));
 	  grid_index_to_update = all_grid_indices(squeeze_factor_to_update);
 	  associated_indices_in_pop = find(external_population_grid_index == grid_index_to_update);
 	  
 	  random_individual_to_remove = associated_indices_in_pop(randi(length(associated_indices_in_pop), 1));
 	  
-	  all_squeeze_factors(squeeze_factor_to_update) = all_squeeze_factors(squeeze_factor_to_update) - 1;
-
 	  %% The individual was present in the original external
 	  %% population, therefore we need to update the domination
 	  %% status (to not take it into account anymore).
@@ -292,10 +318,24 @@ function [external_population, external_population_objective_values, ...
 	  end
 	  
 	  external_population_grid_index(random_individual_to_remove) = -1;
-      current_M = current_M - 1;
+	  current_M = current_M - 1;
+
+	  if (~grid_needs_to_change_(external_population_objective_values, grid_lower_bounds, grid_upper_bounds))
+		all_squeeze_factors(squeeze_factor_to_update) = all_squeeze_factors(squeeze_factor_to_update) - 1;
+      else
+        %% TODO: See if making a function out of this is not too expensive.
+        active_elements = (external_population_grid_index ~= -1);
+        active_values = external_population_objective_values(active_elements, :);
+        
+        [hyper_grid_fn, grid_lower_bounds, grid_upper_bounds] = make_grid_(active_values, C);
+		external_population_grid_index(active_elements) = hyper_grid_fn(active_values);
+		
+		[all_grid_indices, all_squeeze_factors] = get_squeeze_factor_by_index_(external_population_grid_index(active_elements));
+	  end
 	end
   end
 
+  %% Remove unused grid indices and their (null) squeeze factor.
   grid_indices_to_remove = find(all_squeeze_factors == 0);
   all_grid_indices(grid_indices_to_remove) = [];
   all_squeeze_factors(grid_indices_to_remove) = [];
@@ -311,24 +351,41 @@ function [external_population, external_population_objective_values, ...
   squeeze_factor = all_squeeze_factors(i);
 end
 
-function h = hyper_grid_indexing_(constraints, C)
-  [var_count, ~] = size(constraints);
+function [hyper_grid_fn, min_values, max_values, grid_width] = make_grid_(objective_values, C)
+  BY_COLUMN = 1;
+
+  [~, var_count] = size(objective_values);
   
-  min_values = constraints(:, 1)';
-  max_values = constraints(:, 2)';
+  min_values = min(objective_values, [], BY_COLUMN);
+  max_values = max(objective_values, [], BY_COLUMN);
   
   %% +1: Avoid having h(max_value) == (C + 1).
   grid_width = (max_values + 1 - min_values) / C;
 
   powers = C.^(0:(var_count - 1));
 
-  h = @(real_pop) hyper_grid_indexing_inner_(real_pop, min_values, grid_width, powers);
+  hyper_grid_fn = @(obj_val) hyper_grid_indexing_(obj_val, min_values, grid_width, powers);
 end
 
-function result = hyper_grid_indexing_inner_(real_values_pop, min_values, grid_width, powers)
+function result = grid_needs_to_change_(objective_values, old_min_values, old_max_values)
+  BY_COLUMN = 1;
+  [~, var_count] = size(objective_values);
+  
+  if (isempty(old_min_values) && isempty(old_max_values))
+     result = 1;
+     return;
+  end
+  
+  min_values = min(objective_values, [], BY_COLUMN);
+  max_values = max(objective_values, [], BY_COLUMN);
+
+  result = (sum(min_values == old_min_values) < var_count) || (sum(max_values == old_max_values) < var_count) ;
+end
+
+function result = hyper_grid_indexing_(objective_values, min_values, grid_width, powers)
   BY_ROW = 2;
   
-  result = sum(floor((real_values_pop - min_values) / grid_width) .* powers, BY_ROW)';
+  result = sum(floor((objective_values - min_values) / grid_width) .* powers, BY_ROW)';
 end
 
 function [all_indices, all_squeeze_factors] = get_squeeze_factor_by_index_(grid_index)
