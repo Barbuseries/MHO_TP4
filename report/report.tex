@@ -1,0 +1,254 @@
+%%% Local Variables:
+%%% mode: latex
+%%% TeX-master: t
+%%% End:
+\documentclass[12pt, letterpaper]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[frenchb]{babel}
+\usepackage{gensymb}
+\usepackage{latexsym}
+\usepackage{titlesec}
+\usepackage{marvosym}
+\usepackage{enumitem}
+\usepackage[pdftex, hidelinks]{hyperref}
+\usepackage{graphicx}
+\usepackage{rotating}
+\usepackage{caption}
+\usepackage{makecell}
+\usepackage{adjustbox}
+\usepackage{placeins}
+
+\newcommand{\fncell}[3][]{\makecell[l]{#1 \\ #2 \\ #3}}
+\newcommand{\PolOne}[2]{0.5$sin$({#1}) - 2$cos$({#1}) + $sin$({#2}) - 1.5$cos$({#2})}
+\newcommand{\PolTwo}[2]{1.5$sin$({#1}) - $cos$({#1}) + 2$sin$({#2}) - 0.5$cos$({#2})}
+
+\frenchbsetup{StandardItemLabels=true}
+
+\author{Edorh François (EDOF19059507), Guison Vianney (GUIV30069402)}
+\title{Rapport Projet de Métaheuristique en Optimisation (Sujet 1)}
+
+\begin{document}
+\maketitle
+\tableofcontents
+\newpage
+
+\section{Introduction}
+Nous avons choisi de comparer deux algorithmes génétiques, PESA et
+IBEA, dans le cadre de l'optimisation multi-objectifs.\\
+
+Le principe de chaque algorithme est rapidement évoqué, ainsi que des
+exemples de solutions obtenues sur différents problèmes d'optimisation.\\
+
+Pour finir, une comparaison des différents algorithmes est effectuée.
+
+\newpage
+
+\section{PESA}
+
+\subsection{Principe}
+
+À l'instar de SPEA2, PESA utilise une archive. Celle-ci contient les
+meilleurs individus rencontrés durant l'exécution de l'algorithme (un
+paramètre de configuration définit sa taille). Les solutions
+correspondent au contenu de cette archive à la dernière itération.\\
+
+Pour remplir l'archive, on récupère les individus non dominés de la
+population actuelle. Les individus non dominés par le contenu de
+l'archive sont ensuite ajouté un à un à l'intérieur. Les éléments de
+l'archive dominés par ce nouvel individu en sont retirés. De plus, si
+l'archive est temporairement en surcharge suite à cet ajout, un
+élément de l'archive parmis ceux ayant le \textit{squeeze factor}
+(défini plus bas) le plus élevé est retiré.\\
+
+Pour calculer le \textit{squeeze factor}, on divise l'espace objectif
+en une hyper-grille de taille prédéfinie (paramètre de configuration
+spécifiant le nombre de cases par dimension). On assigne ensuite
+chaque individu à une case de cette hyper-grille en fonction de ses
+valeurs objectives. Pour chaque individu, son \textit{squeeze factor}
+correspond au nombre d'invidus contenus dans la
+même case que lui.\\
+De plus, ce \textit{squeeze factor} est aussi utilisé lors de la sélection:
+plus il est élevé, moins l'individu est intéressant.\\
+
+Lors de la création d'une nouvelle population (une fois que l'archive
+a été mise à jour), il se passe la chose suivante:
+
+\begin{itemize}
+  
+\item Un crossover se produit avec une probabilité $Pc$. On
+  sélectionne deux individus de l'archive, par rapport à leur
+  \textit{squeeze factor}, et on génère \textbf{un} enfant.\\
+  
+\item Si il n'y a pas de crossover, une mutation se produit
+  (probabilité égale à $1 - Pc$). Dans ce cas, on sélectionne un
+  individu de l'archive et on génère un nouvel individu par mutation
+  de celui-ci (avec probabilité $Pm$).
+  
+\end{itemize}
+
+Cela se répète jusqu'à ce que la nouvelle population contienne $N$
+éléments.
+
+\subsection{Résultats}
+Les figures \ref{fig:pesa_sch_pareto} à \ref{fig:pesa_zdt6_pareto}
+montrent des exemples d'exécution de l'algorithme sur différents
+problèmes.
+
+\section{IBEA}
+
+\subsection{Principe}
+
+\subsection{Résultats}
+Les figures \ref{fig:ibea_sch_pareto} à \ref{fig:ibea_zdt6_pareto}
+montrent des exemples d'exécution de l'algorithme sur différents
+problèmes.
+
+
+\section{Comparaison}
+
+Les algorithmes ont été comparés en codage <XXX>. Les résultats à
+chaque génération et ce sur 30 itérations ont été enregistrés et
+comparés.\\
+<Pour une itération et un problème donné, les algorithmes ont les mêmes
+populations initiales.> => Vérifier
+
+\subsection{Problèmes de test}
+Les problèmes d'optimisation utilisés pour comparer les deux
+algorithmes sont ceux utilisées pour évaluer l'algorithme NSGA2.\\
+Les solutions optimales des problèmes KUR et POL n'ayant pu être
+déterminées, les métriques associées n'ont pu être calculées. Ainsi,
+pour ces deux problèmes, une comparaison visuelle du front de Pareto a
+été faite.\\
+
+\begin{table}[ht]
+  \centering
+  \begin{adjustbox}{width=1\textwidth}
+    \begin{tabular}{|c|c|c|c|c|c|}
+      \hline
+      Problème & $n$ & Domaine de définition & Fonctions objectifs & Solutions optimales & Commentaires\\
+      \hline
+      SCH & 1 & $[-10^3, 10^3]$ & \fncell[$f_1(x) = x^2$]{$f_2(x) = (x - 2)^2$} & $x \in{} [0, 2]$ & convexe\\
+      \hline
+      FON & 3 & $[-4, 4]$ & \fncell{$f_1(x) = 1 - \exp{(-\sum_{i = 1}^{3}{(x_i - \frac{1}{\sqrt{3}})^2})}$} & \makecell{$x_1 = x_2  = x_3$ \\ $\in{} [\frac{-1}{\sqrt{3}}, \frac{1}{\sqrt{3}}]$} & non convexe\\
+      \hline
+      POL & 2 & $[-\pi, \pi]$ & \makecell{
+                                \fncell{
+                                \fncell{$f_1(x) = 1  + (A_1 - B_1)^2 + (A_2 - B_2)^2$}{$f_2(x) = (x_1 + 3)^2 + (x_2 + 1)^2$}}{
+                                \fncell{$A_1(x) = \PolOne{1}{2}$}{$A_2(x) = \PolTwo{1}{2}$}} \\
+      \fncell{$B_1(x) = \PolOne{x_1}{x_2}$}{$B_2(x) = \PolTwo{x_1}{x_2}$}} &  & \makecell{non convexe, \\ discontinu}\\
+      \hline
+      KUR & 3 & $[-5, 5]$ & \fncell[$f_1(x) = \sum_{i = 1}^{n - 1} (-10\exp{(-0.2\sqrt{x_i^2 + x_{i + 1}^2})})$]
+                                   {$f_2(x) = \sum_{i = 1}^{n - 1} (|x_1|^{0.8} + 5 $sin$(x_i^3))$}&  & non convexe\\
+      \hline
+      ZDT1 & 30 & $[0, 1]$ & \fncell[$f_1(x) = x_1$]
+                             {$f_2(x) = g(x) [1 - \sqrt{x_1 / g(x)}]$}
+                             {$g(x) = 1 + 9(\sum_{i = 2}^{n} x_i) / (n - 1)$}
+                                                                   & \makecell{$x_1 \in{} [0, 1]$ \\ $x_i = 0$, \\ $i = 2, ..., n$} & convexe\\
+      \hline
+      ZDT2 & 30 & $[0, 1]$ & \fncell[$f_1(x) = x_1$]
+                             {$f_2(x) = g(x) [1 - (x_1 / g(x))^2]$}
+                             {$g(x) = 1 + 9(\sum_{i = 2}^{n} x_i) / (n - 1)$}
+                                                                   & \makecell{$x_1 \in{} [0, 1]$ \\ $x_i = 0$, \\ $i = 2, ..., n$} & non convexe\\
+      \hline
+      ZDT3 & 30 & $[0, 1]$ & \fncell[$f_1(x) = x_1$]
+                             {$f_2(x) = g(x) [1 - \sqrt{x_1 / g(x)} - \frac{x_1}{g(x)}$sin$(10\pi{}x_1)]$}
+                             {$g(x) = 1 + 9(\sum_{i = 2}^{n} x_i) / (n - 1)$}
+                                                                   & \makecell{$x_1 \in{} [0, 1]$ \\ $x_i = 0$, \\ $i = 2, ..., n$} & \makecell{convexe, \\ discontinu}\\
+      \hline
+      ZDT4 & 10 & \makecell{$x_1 \in{} [0, 1]$ \\ $x_i \in{} [-5, 5]$, \\ $i = 2, ..., n$}
+               & \fncell[$f_1(x) = x_1$]
+                 {$f_2(x) = g(x) [1 - \sqrt{x_1 / g(x)}]$}
+                 {$g(x) = 1 + 10(n - 1) + (\sum_{i = 2}^{n} [x_i^2 - 10$cos$(4\pi{}x_i)])$}
+                     & \makecell{$x_1 \in{} [0, 1]$ \\ $x_i = 0$, \\ $i = 2, ..., n$} & non convexe\\
+      \hline
+      ZDT6 & 10 & $[0, 1]$ & \fncell[$f_1(x) = 1 - \exp(-4x_1)$sin$^6(6\pi{}x_1)$]
+                             {$f_2(x) = g(x) [1 - (f_1(x) / g(x))^2]$}
+                             {$g(x) = 1 + 9[(\sum_{i = 2}^{n} x_i) / (n - 1)]^{0.25}$}
+                                                                   & \makecell{$x_1 \in{} [0, 1]$ \\ $x_i = 0$, \\ $i = 2, ..., n$} & \makecell{non convexe, \\ non uniformément \\ réparti}\\
+      \hline
+    \end{tabular}
+  \end{adjustbox}
+  \caption{Problèmes utilisés} 
+\end{table}
+
+\FloatBarrier
+
+\subsection{Configurations}
+
+
+% \begin{table}[ht]
+%   \centering
+%   \begin{tabular}{|l|l|}
+%     \hline
+%     \textbf{Propriété} & \textbf{Valeur}\\
+%     \hline
+%     $N$ & 100 \\
+%     \hline
+%     $G_{max}$ & 250 \\
+%     \hline
+%     $P_c$ & 0.9 \\
+%     \hline
+%     $P_m$ & $\frac{1}{n}$  \\
+%     \hline
+%     Crossover & SBX$-20$ \\
+%     \hline
+%     Mutation & Polynomial$-20$ \\
+%     \hline
+%   \end{tabular}
+%   \caption{Configuration commune} 
+% \end{table} 
+
+\FloatBarrier
+
+\subsection{Métriques}
+Les deux indicateurs de mesure $\Upsilon$, pour la convergence et
+$\Delta$, pour la diversité, sont issus de l'article de NSGA2.
+
+\subsubsection{Convergence}
+La convergence $\Upsilon$ correspond à la distance moyenne du front
+de Pareto que l'algorithme a calculé par rapport au front de Pareto
+optimal.\\
+
+
+Plus $\Upsilon$ tend vers zéro, plus les solutions convergent vers
+les solutions optimales.
+
+\subsubsection{Diversité}
+L'indicateur a été légèrement modifié. L'article précise qu'il faut
+tracer une courbe parallèle au front de Pareto optimal. Les solutions
+extrêmes obtenues sont alors utilisées pour calculer $d_f$ et
+$d_l$. Par soucis de simplicité, $d_f$ et $d_l$ sont obtenues en
+utilisant les solutions extrêmes du front de Pareto optimal lui
+même. Cela biaise cependant légèrement cet indice en faveur d'un
+algorithme qui converge mieux.\\
+
+Plus $\Delta$ tend vers zéro, plus la diversité des solutions est
+importante.
+
+\begin{center}
+  $\Delta = \frac{d_f + d_l + \sum_{i = 1}^{N - 1} |d_i - \bar{d}|}{d_f + d_l + (N - 1) \bar{d}}$
+\end{center}
+
+Avec $\bar{d}$, la distance consécutive moyenne des points.
+
+\subsection{Résultats}
+
+\newpage
+
+\section{Conclusion}
+
+
+\newpage
+
+\section{Figures}
+
+\FloatBarrier
+
+\end{document}
+
+%%% Local Variables:
+%%% mode: latex
+%%% TeX-master: t
+%%% End:

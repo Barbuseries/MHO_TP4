@@ -23,3 +23,11 @@ sccprj/
 
 # Octave session info
 octave-workspace
+
+report/auto/
+report/*.out
+report/*.log
+report/*.pdf
+report/*.aux
+report/*.toc
+
