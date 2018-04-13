@@ -123,11 +123,16 @@ function result = create_ga_(ga)
 end
 
 function result = crossover_all_(mating_pool, crossover_fn, context)
+  [N, var_count] = size(mating_pool);
   
+  if (N == 0)
+      result = [];
+      return;
+  end
+
   %% Modify mating pool to have an array of [i, j] (two individuals on
   %% the same row), so we do not have to introduce an explicit loop
   %% (usually slower) to compute the crossover of each parent pair.
-  var_count = length(mating_pool(1, :));
   mating_pool = reshape(mating_pool', 2 * var_count, [])';
 
   %% Pair separation
@@ -201,8 +206,6 @@ function result = mutate_(population, l, mutation_fn, Pm, context)
 end
 
 function result = make_new_pop(mating_pool, l, crossover_fn, Pc, mutation_fn, Pm, context)
-  [N, var_count] = size(mating_pool);
-  
   children = crossover_(mating_pool, crossover_fn, Pc, context);
   result = mutate_(children, l, mutation_fn, Pm, context);
 end

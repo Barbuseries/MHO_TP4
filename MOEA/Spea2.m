@@ -110,25 +110,25 @@ function result = rawFitness_(objective_values, maximizing)
   [N, fn_count] = size(objective_values);
   BY_ROW = 2;
 
- result = zeros(1, N);
- strength = zeros(1, N);
+  result = zeros(1, N);
+  strength = zeros(1, N);
 
- if (maximizing)
-   relation = @ge; %% i dominates j, all objective values of i >= objective values of j
- else
-   relation = @le;  %% i dominates j, all objective values of i <= objective values of j
- end
-  
+  if (maximizing)
+	relation = @ge; %% i dominates j, all objective values of i >= objective values of j
+  else
+	relation = @le;  %% i dominates j, all objective values of i <= objective values of j
+  end
+
   for i = 1:N
-    %% dominated = all(objective_values(i, :) <= objective_values, BY_ROW); %% SLOWER!
-	dominated = sum(relation(objective_values(i, :), objective_values), BY_ROW) == fn_count;
+	vals = objective_values(i, :);
+	dominated = sum(relation(vals, objective_values), BY_ROW) == fn_count;
 	strength(i) = sum(dominated) - 1; %% Because we also check the point itself.
   end
   
   for i = 1:N
-    %% dominated = all(objective_values <= objective_values(i, :), BY_ROW); %% SLOWER!
-	dominators = sum(relation(objective_values, objective_values(i, :)), BY_ROW) == fn_count;
-	result(i) = sum(strength .* dominators') - strength(i); %% Because we also check the point itself.
+    vals = objective_values(i, :);
+	dominators = sum(relation(objective_values, vals), BY_ROW) == fn_count;
+	result(i) = strength * dominators - strength(i); %% Because we also check the point itself.
   end
 end
 
@@ -141,7 +141,8 @@ function result = densityEstimation_(objective_values)
 
   for i = 1:N
 	distances = sum((objective_values - objective_values(i, :)).^2, BY_ROW);
-	sorted_distances = mink(distances, k + 1); %% Because we also check the point itself.
+    distances(i) = Inf;  %% Ignore the point itself.
+	sorted_distances = mink(distances, k);
 
 	sigma = sorted_distances(end);  
 	result(i) = 1 / (sigma + 2);
