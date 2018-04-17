@@ -46,14 +46,14 @@ function [result, h] = run_(current_population, ga_context, config)
     end
     
     %step 2
-    [fitness, real_values_pop, objective_values, maxAbsIndicatorValue] = evalFitness_(current_population, objective_vector, decode_fn, kappa);
+    [fitness, real_values_pop, objective_values] = evalFitness_(current_population, objective_vector, decode_fn, kappa);
     
     %step 3
     [sizePop,~] = size(current_population);    
     
     while(sizePop > N)
         posElementToRemove = findWorstIndex(fitness);
-        [fitness, current_population, objective_values] = removeAndRevaluate(fitness, current_population, objective_values, posElementToRemove, maxAbsIndicatorValue, kappa);
+        [fitness, current_population, objective_values] = removeAndRevaluate(fitness, current_population, objective_values, posElementToRemove, kappa);
         
         [sizePop,~] = size(current_population);
     end
@@ -94,15 +94,10 @@ function [fitness, real_values_pop, objective_values, maxAbsIndicatorValue] = ev
     [N, fn_count] = size(objective_values);
     
     %find maxAbsIndicatorValue
-    maxAbsIndicatorValue = -inf;
     fitcomp = zeros(N,N);
     for i = 1:N
         for j = 1:N
             fitcomp(i,j) = additiveIndicator(objective_values(i,:), objective_values(j,:) , fn_count);
-            if ( abs(fitcomp(i,j)) > maxAbsIndicatorValue)
-                maxAbsIndicatorValue = abs(fitcomp(i,j));
-            end
-            
         end
     end
     %calculate fitness
@@ -111,7 +106,7 @@ function [fitness, real_values_pop, objective_values, maxAbsIndicatorValue] = ev
         sum = 0;
         for j = 1:N
             if (i ~= j)
-                sum = sum + exp((-fitcomp(i,j)/maxAbsIndicatorValue ) / kappa);
+                sum = sum + exp((-fitcomp(i,j) ) / kappa);
             end
         end
         fitness(i) = sum;
@@ -125,14 +120,14 @@ function epsilon = additiveIndicator(a, b, fn_count)
     end
 end
 
-function [fitness, current_population, objective_values] = removeAndRevaluate(fitness, current_population, objective_values, posElementToRemove, maxAbsIndicatorValue, kappa)
+function [fitness, current_population, objective_values] = removeAndRevaluate(fitness, current_population, objective_values, posElementToRemove, kappa)
     [~, fn_count] = size(objective_values);
     [sizePop,~] = size(current_population);
 
     for i = 1:sizePop
         if (i ~= posElementToRemove)
             epsilon = additiveIndicator(objective_values(i,:), objective_values(posElementToRemove,:) , fn_count);     
-            fitness(i) = fitness(i) - exp((-epsilon/ maxAbsIndicatorValue ) / kappa);
+            fitness(i) = fitness(i) - exp((-epsilon ) / kappa);
         end
     end
     current_population(posElementToRemove,:) =[]; %remove this element
