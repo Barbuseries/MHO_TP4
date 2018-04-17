@@ -13,6 +13,7 @@ Ga;            global GA;
 Spea2;         global SPEA2;
 Nsga2;         global NSGA2;
 Pesa;          global PESA;
+Ibea;          global IBEA;
 Problem;       global PROBLEM;
 
 
@@ -24,7 +25,7 @@ if (PROFILING)
   profile on;
 end
 
-algo = GA.create(PESA);
+algo = GA.create(IBEA);
 
 p = PROBLEM.zdt3(algo, 30);
 
@@ -33,9 +34,9 @@ config.l = 52;
 config.Pc = 0.7;
 config.Pm = 1 / config.l;
 config.C = 64;
-config.N = 200;
-config.M = 1000;
-config.G_max = 1000;
+config.N = 100;
+config.M = 100;
+config.G_max = 200;
 %%config.crossover_fn = CROSSOVER.simulatedBinary(20);
 %%config.mutation_fn = MUTATION.polynomial(20);
 config.crossover_fn = CROSSOVER.uniform(0.5);
