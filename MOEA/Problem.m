@@ -42,7 +42,7 @@ function result = TOTO_f2_(x, y)
 end
 
 function result = TOTO_solutions_(var_count, n)
-  result = horzcat(linspace(0, 10, n)', zeros(n, 1));
+  result = horzcat(zeros(n, 1), linspace(0, 10, n)');
 end
 
 %% Kursawe
