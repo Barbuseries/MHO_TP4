@@ -27,20 +27,21 @@ end
 
 algo = GA.create(IBEA);
 
-p = PROBLEM.zdt3(algo, 30);
+p = PROBLEM.fonsecaFlemming(algo, 2);
 
 config = algo.defaultConfig();
-config.l = 52;
-config.Pc = 0.7;
-config.Pm = 1 / config.l;
-config.C = 64;
+config.l = -1;
+config.Pc = 1;
+config.Pm = 1;
+%config.C = 64;
 config.N = 100;
-config.M = 100;
+config.kappa = 1;
+%config.M = 100;
 config.G_max = 200;
-%%config.crossover_fn = CROSSOVER.simulatedBinary(20);
-%%config.mutation_fn = MUTATION.polynomial(20);
-config.crossover_fn = CROSSOVER.uniform(0.5);
-config.mutation_fn = MUTATION.bitFlip;
+config.crossover_fn = CROSSOVER.simulatedBinary(20);
+config.mutation_fn = MUTATION.polynomial(20);
+%%config.crossover_fn = CROSSOVER.uniform(0.5);
+%%config.mutation_fn = MUTATION.bitFlip;
 %%config.stop_criteria_fn = STOP_CRITERIA.meanChangeRate(0.005);
 
 [r, h] = p.optimize(config);
