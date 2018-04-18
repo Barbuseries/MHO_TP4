@@ -13,6 +13,7 @@ Ga;            global GA;
 Spea2;         global SPEA2;
 Nsga2;         global NSGA2;
 Pesa;          global PESA;
+Ibea_adaptive; global IBEA_ADAPTIVE;
 Ibea;          global IBEA;
 Problem;       global PROBLEM;
 
@@ -25,7 +26,7 @@ if (PROFILING)
   profile on;
 end
 
-algo = GA.create(IBEA);
+algo = GA.create(IBEA_ADAPTIVE);
 
 p = PROBLEM.fonsecaFlemming(algo, 2);
 
@@ -35,7 +36,7 @@ config.Pc = 1;
 config.Pm = 1;
 %config.C = 64;
 config.N = 100;
-config.kappa = 1;
+config.kappa = 0.005;
 %config.M = 100;
 config.G_max = 200;
 config.crossover_fn = CROSSOVER.simulatedBinary(20);
