@@ -76,16 +76,16 @@ Lors de la création d'une nouvelle population (une fois que l'archive
 a été mise à jour), il se passe la chose suivante:
 
 \begin{itemize}
-  
+
 \item Un crossover se produit avec une probabilité $Pc$. On
   sélectionne deux individus de l'archive, par rapport à leur
   \textit{squeeze factor}, et on génère \textbf{un} enfant.\\
-  
+
 \item Si il n'y a pas de crossover, une mutation se produit
   (probabilité égale à $1 - Pc$). Dans ce cas, on sélectionne un
   individu de l'archive et on génère un nouvel individu par mutation
   de celui-ci (avec probabilité $Pm$).
-  
+
 \end{itemize}
 
 Cela se répète jusqu'à ce que la nouvelle population contienne $N$
@@ -100,8 +100,40 @@ problèmes.
 
 \subsection{Principe}
 
+IBEA se base sur un indicateur de qualité \textit{I} pour le processus
+de sélection qui permet de comparer la qualité de 2 set de Pareto
+l'un à l'autre, cet indicateur permet par la suite de calculer la \textit{fitness}
+d'un individus par rapport à tous les autres.\\
+\\
+Contrairement à des algorithmes plus classique on peut adapter IBEA en fonction
+des préférences de l'utilisateur en choisissant un indicateur différent, de plus il
+ne nécessite pas de mécanisme pour conserver la diversité des populations.
+\\
+Concernant son implémentions, dans un premier temps on vas calculer l'indicateur de qualité \textit{I} pour chaque paire d'individus, ces indicateurs
+nous permettent d'attribuer une \textit{fitness} à toute notre population.\\
+Ensuite on passe au processus de sélection, qui consiste à retirer l'individu
+avec la plus basse \textit{fitness} jusqu'à ce que la population actuelle fasse la taille de
+la population initiale, il est à noter qu'à chaque retrait il faut recalculer la \textit{fitness}
+de tous individus.\\
+A ce niveau si les conditions d'arrêt ne sont pas atteintes on applique un tournois sur notre population pour créer une nouvelle population à laquelle on applique une mutation, enfin on ajoute notre nouvelle population à l'ancienne et on recommence l'algorithme.
+
 \subsection{Résultats}
 Les figures \ref{fig:ibea_sch_pareto} à \ref{fig:ibea_zdt6_pareto}
+montrent des exemples d'exécution de l'algorithme sur différents
+problèmes.
+
+\section{IBEA Adaptatif}
+
+\subsection{Principe}
+
+L'un des principaux problèmes d'IBEA est que le calcul de \textit{fitness} demande un paramètre de mise à l'échelle $\kappa$ à déterminer en fonction de \textit{I} et du problème traité, or les résultats de \textit{I} peuvent être très étalés ce qui rend
+le choix de $\kappa$ très fastidieux.\\
+
+L'IBEA adaptatif résout ce problème en mettant à l'échelle tout les points de la population dans un intervalle entre [-1,1] ce qui
+permet d'utiliser le même $\kappa$ pour tout les problèmes.
+
+\subsection{Résultats}
+Les figures \ref{fig:pesa_sch_pareto} à \ref{fig:pesa_zdt6_pareto}
 montrent des exemples d'exécution de l'algorithme sur différents
 problèmes.
 
@@ -170,7 +202,7 @@ pour ces deux problèmes, une comparaison visuelle du front de Pareto a
       \hline
     \end{tabular}
   \end{adjustbox}
-  \caption{Problèmes utilisés} 
+  \caption{Problèmes utilisés}
 \end{table}
 
 \FloatBarrier
@@ -197,8 +229,8 @@ pour ces deux problèmes, une comparaison visuelle du front de Pareto a
 %     Mutation & Polynomial$-20$ \\
 %     \hline
 %   \end{tabular}
-%   \caption{Configuration commune} 
-% \end{table} 
+%   \caption{Configuration commune}
+% \end{table}
 
 \FloatBarrier
 
