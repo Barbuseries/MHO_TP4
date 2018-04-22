@@ -71,9 +71,14 @@ function [result, h] = run_(internal_population, ga_context, config, selection_p
 																  all_grid_indices, all_squeeze_factors);
 
 	done = ((g == G_max) || stop_criteria_fn(external_population_objective_values, old_external_population_objective_values, maximizing));
+
+	real_values_external_population = decode_fn(external_population);
+	
+	h(g).population = real_values_external_population;
+	h(g).objective_values = external_population_objective_values;
 	
 	if (done)
-	  result = decode_fn(external_population);
+	  result = real_values_external_population;
 	  
 	  h(g).population = result;
 	  h(g).objective_values = external_population_objective_values;
@@ -102,10 +107,6 @@ function [result, h] = run_(internal_population, ga_context, config, selection_p
 	  children_kept_from_crossover = children_from_crossover(child_to_keep_indices, :);
 	  
 	  internal_population = [children_kept_from_crossover; children_from_mutation];
-
-
-	  h(g).population = decode_fn(external_population);
-	  h(g).objective_values = external_population_objective_values;
 	  
 	  old_external_population_objective_values = external_population_objective_values;
 	  g = g + 1;

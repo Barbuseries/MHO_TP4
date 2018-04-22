@@ -125,9 +125,9 @@ end
 %% Poloni
 function result = poloni(ga)
   result.objective_vector = {@poloni_f1_, @poloni_f2_};
-  result.constraints = [[-pi, pi],
-						[-pi, pi]];
+  result.constraints = [[-pi, pi]; [-pi, pi]];
 
+  result.optimal_solutions = @(n) [];
   result.optimize = optimize_(ga, result, 0);
   result.name = 'POL';
 end

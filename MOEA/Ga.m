@@ -230,8 +230,8 @@ function [all_h, plot_legend] = iterativeShowPaleto_(problem, variables, plot_op
       plot_legend = cell(0);
   end
   
-  colors = ['r', 'b', 'g', 'k'];
-  shape = ['*', 'd', '+', '.'];
+  colors = ['r', 'b', 'g', 'k', 'm', 'c', 'y'];
+  shape = ['*', 'd', '+', '.', 'v', 'x', 's'];
   
   objective_vector = problem.objective_vector;
 

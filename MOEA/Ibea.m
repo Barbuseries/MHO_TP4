@@ -6,10 +6,6 @@ function Ibea
   IBEA.name = "IBEA";
 end
 
-%% TODO: Implement (either as config parameter or as default)
-%% Adaptative IBEA.
-%% (Allows not having to twick kappa too much).
-
 function [result, h] = run_(current_population, ga_context, config)
   global SELECTION;
   global GA;
@@ -18,6 +14,7 @@ function [result, h] = run_(current_population, ga_context, config)
   l = config.l;
   
   kappa = config.kappa;
+  adaptative = config.adaptative;
   
   G_max = config.G_max;
 
@@ -46,30 +43,42 @@ function [result, h] = run_(current_population, ga_context, config)
 	if (l == -1)
 	  context.iteration = g;
     end
-    
+
     %step 2
-    [fitness, ind_exp, real_values_pop, objective_values] = evalFitness_(current_population, objective_vector, decode_fn, kappa);
+    [fitness, ind_exp, real_values_pop, objective_values] = evalFitness_(current_population, objective_vector, decode_fn, kappa, adaptative);
     
     %step 3
     if (g > 1)
-      %% NOTE: Technically, it says to find the worst individual and
-      %% remove it from the population until we have N
-      %% individuals. But we already know we have 2 * N individuals,
-      %% so why not just find the N worst ones and remove them all at the same time?.
-      [~, posElementsToRemove] = mink(fitness, N);
-      [fitness, current_population, objective_values] = removeAndRevaluate(fitness, current_population, objective_values, posElementsToRemove, ind_exp);
+	  kept_indices = 1:(2*N);
+    
+	  for i = 1:N
+		[~, posElementToRemove] = min(fitness(kept_indices));
+        j = kept_indices(posElementToRemove);
+        
+        kept_indices(posElementToRemove) = [];
+        
+		fitness = removeAndRevaluateIterative(fitness, posElementToRemove, ind_exp, kept_indices);
+      end
+
+	  fitness = fitness(kept_indices);
+      current_population = current_population(kept_indices, :);
+      objective_values = objective_values(kept_indices, :);
     end
     
     %step 4
     done = ((g == G_max)|| stop_criteria_fn(objective_values, old_objective_values, maximizing));
+
+	non_dominated = get_non_dominated_(objective_values, maximizing);
+	
+	%%save history
+    h(g).population = current_population(non_dominated, :);
+    h(g).objective_values = objective_values(non_dominated, :);
     
     %step 5
     if (done)
-        non_dominated = get_non_dominated_(objective_values, maximizing);
-        
         %% Even though those elements were removed from the
         %% population, we never removed them from this...
-        real_values_pop(posElementsToRemove, :) = [];
+        real_values_pop = real_values_pop(kept_indices, :);
         
         result = real_values_pop(non_dominated, :);
         associated_values = objective_values(non_dominated, :);
@@ -87,40 +96,52 @@ function [result, h] = run_(current_population, ga_context, config)
     
         old_objective_values = objective_values;
         
-        %save history
-        h(g).population = current_population;
-        h(g).objective_values = objective_values;
-        
         g = g + 1;
     end
   end
 end
 
-function [fitness, ind_exp, real_values_pop, objective_values] = evalFitness_(population, fn_vector, decode_fn, kappa)
+function [fitness, ind_exp, real_values_pop, objective_values] = evalFitness_(population, fn_vector, decode_fn, kappa, adaptative)
     global UTILS;
-    
+
+	BY_COLUMN = 1;
     BY_ROW = 2;
     
     real_values_pop = decode_fn(population);
     objective_values = UTILS.evalFnVector(fn_vector, real_values_pop);
     [N, ~] = size(objective_values);
-    
+
+	%% Normalize objective values
+	if (adaptative)
+	  min_bounds = min(objective_values, [], BY_COLUMN);
+	  max_bounds = max(objective_values, [], BY_COLUMN);
+
+	  values = (objective_values - min_bounds) ./ (max_bounds - min_bounds);
+	else
+	  values = objective_values;
+	end
+	
     %% For each individual i, compute epsilon(j, i), which is the
     %% minimum amount by which a plane, parallel to one of the axes
     %% and crossing j, needs to move to exceed or equal i. (epsilon is
     %% the maximum amount between i and j in any coordinate).
     epsilon = zeros(N, N);
     for i = 1:N
-      epsilon(i, :) = additiveIndicator(objective_values, objective_values(i,:));
+      epsilon(i, :) = additiveIndicator(values, values(i,:));
     end
-    
+
+	%% Normalize epsilon
+	if (adaptative)
+	  epsilon = epsilon / max(abs(epsilon(:)));
+	end
+	
     %calculate fitness
     ind_exp = exp(-epsilon / kappa);
 	
 	%% +1, because we always compute epsilon(i, i), which gives us
 	%% -e^(0) (-1) in the end. This is 100% not useful (because all
 	%% fitnesses are offset by it anyway...).
-    fitness = (sum(-ind_exp, BY_ROW) + 1)';
+    fitness = (-sum(ind_exp, BY_ROW) + 1)';
 end
 
 function epsilon = additiveIndicator(a, b)
@@ -130,21 +151,9 @@ function epsilon = additiveIndicator(a, b)
     epsilon = max(a - b, [], BY_ROW)';
 end
 
-function [fitness, current_population, objective_values] = removeAndRevaluate(fitness, current_population, objective_values, posElementsToRemove, ind_exp)
+function [fitness] = removeAndRevaluateIterative(fitness, posElementToRemove, ind_exp, kept_indices)
     BY_ROW =  2;
-    
-    [sizePop,~] = size(current_population);
-    
-    kept_indices = true(1, sizePop);
-    kept_indices(posElementsToRemove) = 0;
         
-    fitness = fitness(kept_indices);
-    current_population = current_population(kept_indices, :);
-    objective_values = objective_values(kept_indices, :);
-
-    
-    %% NOTE: Optimized for speed. Sorry.
-    
     %% For each removed element, get back the associated indicator
     %% value for each kept individual.
     %% Add this value to the individual's fitness.
@@ -157,9 +166,8 @@ function [fitness, current_population, objective_values] = removeAndRevaluate(fi
     %% columns. As each row corresponds to a given individual, we just
     %% sum the values to get the it's actual delta fitness.)
 	
-    indicator_exp_per_individual = ind_exp(kept_indices, :);
-    relevent_indicators = indicator_exp_per_individual(:, posElementsToRemove);
-    fitness = fitness + sum(relevent_indicators, BY_ROW)';
+    relevent_indicators = ind_exp(kept_indices, posElementToRemove);
+    fitness(kept_indices) = fitness(kept_indices) + sum(relevent_indicators, BY_ROW)';
 end
 
 function non_dominated = get_non_dominated_(objective_values, maximizing)
@@ -193,4 +201,5 @@ function result = defaultConfig_
   result = GA.defaultConfig();
 
   result.kappa = 1; %% fitness scaling factor
+  result.adaptative = false;
 end

@@ -19,6 +19,7 @@ function result = run_(all_problems, all_algos, all_configs, count)
   result = repmat(result_template, algo_count, problem_count, count);
   total_iteration_count = problem_count * count * algo_count;
   iteration = 1;
+  estimated_time = NaN;
   start = datetime('now');
 
   for k = 1:problem_count
@@ -26,36 +27,50 @@ function result = run_(all_problems, all_algos, all_configs, count)
     p_dummy = problem([]);
 	eval_problem = @(x) UTILS.evalFnVector(p_dummy.objective_vector, x);
 	pareto_front = eval_problem(p_dummy.optimal_solutions(500));
-	
-	for i = 1:count
-      initial_population = [];
-      all_Ns = cellfun(@(c) c.N, all_configs(:, k));
-      all_ls = cellfun(@(c) c.l, all_configs(:, k));
-      
-      all_equal = @(a) sum(a) == (a(1) * length(a));
-      if (all_equal(all_Ns) && all_equal(all_ls))
-          N = all_Ns(1); l = all_ls(1);
-          initial_population = GA.initialPopulation(N, p_dummy.constraints, l);
-      end          
-      
-	  for j = 1:algo_count
-        ratio = (iteration / total_iteration_count);
-        estimated_time = NaN;
-        delta_time = time(between(start, datetime('now')));
-        if (iteration > 0)
-            estimated_time = delta_time * ((1 - ratio) / ratio);
-        end
-        fprintf(1, '\t\tIteration: %d / %d (%.02f%%) - Estimated time: %ss\n', ...
-                    iteration, total_iteration_count, 100 * ratio, estimated_time);
-          
-		algo = GA.create(all_algos(j));
+    
+    initial_population = [];
+    all_Ns = cellfun(@(c) c.N, all_configs(:, k));
+
+    all_equal = @(a) sum(a) == (a(1) * length(a));
+
+    %% NOTE: If all Ns are equal, create a unique common initial
+    %% population.
+    %% If ls is not -1, just encode the initial population so it can
+    %% be used.
+    if (all_equal(all_Ns))
+        N = all_Ns(1);
+        initial_population = GA.initialPopulation(N, p_dummy.constraints, -1);
+    end          
+
+    lower_bounds = p_dummy.constraints(:, 1)';
+    upper_bounds = p_dummy.constraints(:, 2)';
+    
+    encode_pop = @(l) round((2^(l) - 1) * (initial_population - lower_bounds) ./ (upper_bounds - lower_bounds));
+	 
+    for j = 1:algo_count
+        algo = GA.create(all_algos(j));
 		
 		p = problem(algo);
 		
 		config = algo.defaultConfig();
 		config = mergeStruct(config, all_configs{j, k});
-		config.population = initial_population;
 
+		if (config.l == -1)
+		  config.population = initial_population;
+		else
+		  config.population = encode_pop(config.l);
+		end
+        
+      for i = 1:count 
+        ratio = (iteration / total_iteration_count);
+        
+        delta_time = time(between(start, datetime('now')));
+        if (iteration > 1)
+            estimated_time = delta_time * ((1 - ratio) / ratio);
+        end
+        fprintf(1, '\t\tIteration: %d / %d (%.02f%%) - Estimated time: %ss\n', ...
+                    iteration, total_iteration_count, 100 * ratio, estimated_time);
+          
 		[~, h] = p.optimize(config);
 
 		result(j, k, i).metrics = computeMetrics_({h.objective_values}, pareto_front);
@@ -117,15 +132,21 @@ function result = computeMetrics_(h, pareto_front)
   end
 end
 
-function plot_(all_algos, all_problems, data, compare_exact) 
+function plot_(all_algos, all_problems, data, compare_exact, all_names) 
   if (~exist('compare_exact', 'var'))
     compare_exact = false;
   end
   
+  if (~exist('all_names', 'var'))
+    all_names = [all_algos.name];
+  end
+  
+  all_names = cellstr(all_names);
+  
   [algo_count, problem_count, run_count] = size(data);
 
-  colors = ['r', 'b', 'g', 'k'];
-  shape = ['*', 'd', '+', '.'];
+  colors = ['r', 'b', 'g', 'k', 'm', 'c', 'y'];
+  shape = ['*', 'd', '+', '.', 'v', 'x', 's'];
   
   fields = fieldnames(data(1).metrics);
   field_count = length(fields);
@@ -161,7 +182,7 @@ function plot_(all_algos, all_problems, data, compare_exact)
 %formated_data(isinf(formated_data)) = 0;
 %formated_data(:, 1:end) = formated_data(:, end:-1:1);
           boxplot(formated_data, 'colors', colors, ...,
-                  'Labels', cellstr([all_algos.name]), ...
+                  'Labels', all_names, ...
                   'Notch', 'on');
           
 		else
@@ -195,7 +216,7 @@ function plot_(all_algos, all_problems, data, compare_exact)
           end
 
           if (~compare_exact)
-			legend(all_h, [all_algos.name]);
+			legend(all_h, all_names);
           end
 		end
 

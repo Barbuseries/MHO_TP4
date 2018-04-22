@@ -13,6 +13,7 @@ Ga;            global GA;
 Spea2;         global SPEA2;
 Nsga2;         global NSGA2;
 Pesa;          global PESA;
+Pesa2;         global PESA2;
 Ibea_adaptive; global IBEA_ADAPTIVE;
 Ibea;          global IBEA;
 Problem;       global PROBLEM;
@@ -26,19 +27,20 @@ if (PROFILING)
   profile on;
 end
 
-algo = GA.create(IBEA_ADAPTIVE);
+algo = GA.create(IBEA);
 
-p = PROBLEM.fonsecaFlemming(algo, 2);
+p = PROBLEM.zdt4(algo, 10);
 
 config = algo.defaultConfig();
 config.l = -1;
 config.Pc = 1;
-config.Pm = 1;
-%config.C = 64;
+config.Pm = 0.1;
+config.C = 32;
 config.N = 100;
-config.kappa = 0.005;
-%config.M = 100;
-config.G_max = 200;
+config.kappa = 0.002;
+config.adaptative = 1;
+config.M = 100;
+config.G_max = 400;
 config.crossover_fn = CROSSOVER.simulatedBinary(20);
 config.mutation_fn = MUTATION.polynomial(20);
 %%config.crossover_fn = CROSSOVER.uniform(0.5);
@@ -46,7 +48,7 @@ config.mutation_fn = MUTATION.polynomial(20);
 %%config.stop_criteria_fn = STOP_CRITERIA.meanChangeRate(0.005);
 
 [r, h] = p.optimize(config);
-disp(r);
+%%ldisp(r);
 
 GA.showPaleto(p, r, true);
 
